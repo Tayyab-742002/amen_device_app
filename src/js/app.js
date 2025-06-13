@@ -95,7 +95,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         handlePickupPointUpdate
       );
       
-      setConnectionStatus('online', 'Connected');
+      // Initially set status to connecting until we get a vehicle update
+      setConnectionStatus('connecting', 'Connecting to vehicle...');
     } catch (error) {
       console.error('Error setting up real-time subscriptions:', error);
       setConnectionStatus('offline', 'Disconnected');
@@ -138,6 +139,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
       ` : ''}
     `;
+    
+    // Update connection status based on vehicle status
+    const status = vehicleData.status ? vehicleData.status.toLowerCase() : 'unknown';
+    
+    if (status === 'online' || status === 'active') {
+      setConnectionStatus('online', 'Connected');
+    } else if (status === 'offline' || status === 'inactive' || status === 'error') {
+      setConnectionStatus('offline', `Vehicle ${status}`);
+    } else if (status === 'idle' || status === 'standby') {
+      setConnectionStatus('idle', `Vehicle ${status}`);
+    } else if (status === 'maintenance') {
+      setConnectionStatus('maintenance', 'In maintenance');
+    } else {
+      setConnectionStatus('connecting', `Vehicle status: ${vehicleData.status || 'unknown'}`);
+    }
   }
   
   // Handle pickup point update
@@ -217,12 +233,29 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           ` : ''}
         `;
+        
+        // Set initial connection status based on vehicle status
+        const status = vehicleData.status ? vehicleData.status.toLowerCase() : 'unknown';
+        
+        if (status === 'online' || status === 'active') {
+          setConnectionStatus('online', 'Connected');
+        } else if (status === 'offline' || status === 'inactive' || status === 'error') {
+          setConnectionStatus('offline', `Vehicle ${status}`);
+        } else if (status === 'idle' || status === 'standby') {
+          setConnectionStatus('idle', `Vehicle ${status}`);
+        } else if (status === 'maintenance') {
+          setConnectionStatus('maintenance', 'In maintenance');
+        } else {
+          setConnectionStatus('connecting', `Vehicle status: ${vehicleData.status || 'unknown'}`);
+        }
       } else {
         vehicleInfoEl.innerHTML = '<div class="error">Vehicle not found</div>';
+        setConnectionStatus('offline', 'Vehicle not found');
       }
     } catch (error) {
       console.error('Error loading vehicle data:', error);
       vehicleInfoEl.innerHTML = '<div class="error">Failed to load vehicle data</div>';
+      setConnectionStatus('offline', 'Connection error');
     }
   }
 
@@ -431,15 +464,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     connectionStatusEl.textContent = message;
     
     // Remove all status classes
-    statusIconEl.classList.remove('status-online', 'status-offline', 'status-connecting');
+    statusIconEl.classList.remove('status-online', 'status-offline', 'status-connecting', 'status-idle', 'status-maintenance');
+
+    let logoText = document.getElementById('logo-text');
+    
     
     // Add the appropriate class
     switch (status) {
       case 'online':
         statusIconEl.classList.add('status-online');
+        logoText.style.color = 'var(--terminal-green)';
         break;
       case 'offline':
         statusIconEl.classList.add('status-offline');
+        logoText.style.color = 'red';
+        break;
+      case 'idle':
+        statusIconEl.classList.add('status-idle');
+        logoText.style.color = 'yellow';
+        break;
+      case 'maintenance':
+        statusIconEl.classList.add('status-maintenance');
+        logoText.style.color = 'purple';
         break;
       default:
         statusIconEl.classList.add('status-connecting');
