@@ -13,6 +13,7 @@ class MapHandler {
     this.closestRouteInfo = null;
     this.secondRouteInfo = null;
     this.sortedPickupPoints = null;
+    this.userHasInteracted = false; // Track if user has manually moved the map
   }
 
   // Initialize the map
@@ -40,6 +41,15 @@ class MapHandler {
         
         // Add scale
         this.map.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
+
+        // Track when user manually interacts with the map
+        this.map.on('dragstart', () => {
+          this.userHasInteracted = true;
+        });
+        
+        this.map.on('zoomstart', () => {
+          this.userHasInteracted = true;
+        });
 
         // Create vehicle marker element with image
         const vehicleElement = document.createElement('div');
@@ -84,6 +94,10 @@ class MapHandler {
             'line-color': '#2ecc71', // Green color for closest route
             'line-width': 6,
             'line-opacity': 0.8
+          },
+          // Higher z-index to render on top of other routes
+          metadata: {
+            zIndex: 10
           }
         });
 
@@ -113,6 +127,10 @@ class MapHandler {
             'line-color': '#f1c40f', // Yellow color for second closest
             'line-width': 5,
             'line-opacity': 0.8
+          },
+          // Medium z-index
+          metadata: {
+            zIndex: 5
           }
         });
 
@@ -143,13 +161,43 @@ class MapHandler {
               'line-width': 4,
               'line-opacity': 0.6,
               'line-dasharray': [2, 2]
+            },
+            // Lowest z-index
+            metadata: {
+              zIndex: 1
             }
           });
         }
         
+        // Ensure the layers are in the correct order
+        this.reorderLayers();
+        
         resolve();
       });
     });
+  }
+  
+  // Make sure the closest route is on top, then second closest, then others
+  reorderLayers() {
+    if (!this.map) return;
+    
+    // Get all route layer IDs
+    const layers = [
+      'route-closest',
+      'route-second'
+    ];
+    
+    for (let i = 0; i < 5; i++) {
+      layers.push(`route-other-${i}`);
+    }
+    
+    // Reorder layers from lowest to highest z-index
+    // This ensures the closest route is visually on top when routes overlap
+    for (let i = 0; i < layers.length; i++) {
+      for (let j = 0; j < layers.length - 1; j++) {
+        this.map.moveLayer(layers[j + 1], layers[j]);
+      }
+    }
   }
 
   // Update vehicle marker position
@@ -174,11 +222,13 @@ class MapHandler {
       this.vehicleMarker.setLngLat([longitude, latitude]);
     }
     
-    // Pan map to new position with smooth animation
-    this.map.panTo([longitude, latitude], {
-      duration: 1000,
-      animate: true
-    });
+    // Only pan map to new position if user hasn't manually interacted with the map
+    if (!this.userHasInteracted) {
+      this.map.panTo([longitude, latitude], {
+        duration: 1000,
+        animate: true
+      });
+    }
     
     // Update routes if we have pickup points and vehicle position changed
     if (this.pickupMarkers.length > 0) {
@@ -381,8 +431,14 @@ class MapHandler {
         }
       }
       
-      // Fit the map to include all visible routes and markers
-      this.fitMapToRoutes();
+      // Make sure the closest route layer is on top
+      this.reorderLayers();
+      
+      // Only fit the map to routes if this is the first time showing routes
+      // and the user hasn't manually interacted with the map
+      if (!this.userHasInteracted) {
+        this.fitMapToRoutes();
+      }
       
       // Return the closest route info for display in the sidebar
       return this.closestRouteInfo;
@@ -560,14 +616,16 @@ class MapHandler {
         }
       }
       
-      // Fit the map to the route
-      const bounds = new mapboxgl.LngLatBounds();
-      routeGeometry.coordinates.forEach(point => bounds.extend(point));
-      
-      this.map.fitBounds(bounds, {
-        padding: 80,
-        maxZoom: 15
-      });
+      // Only fit map to the route if user hasn't manually interacted with the map
+      if (!this.userHasInteracted) {
+        const bounds = new mapboxgl.LngLatBounds();
+        routeGeometry.coordinates.forEach(point => bounds.extend(point));
+        
+        this.map.fitBounds(bounds, {
+          padding: 80,
+          maxZoom: 15
+        });
+      }
       
       return {
         distance: route.distance,
