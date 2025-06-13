@@ -1,0 +1,22 @@
+{
+  "name": "amen-device-tracking",
+  "version": "1.0.0",
+  "description": "AMEN Vehicle Tracking Device Application",
+  "license": "ISC",
+  "author": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^36.4.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "electron-store": "^8.2.0",
+    "mapbox-gl": "^3.2.0"
+  }
+}

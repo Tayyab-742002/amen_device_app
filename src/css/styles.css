@@ -1,0 +1,756 @@
+/* Global styles */
+:root {
+  --primary-color: #0066ff;
+  --secondary-color: #ff9900;
+  --accent-color: #1a75ff;
+  --danger-color: #ff3333;
+  --light-bg: #f5f7fa;
+  --dark-bg: #1e293b;
+  --text-color: #334155;
+  --text-light: #ffffff;
+  --border-color: #e2e8f0;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --radius: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  background: var(--light-bg);
+  color: var(--text-color);
+  height: 100%;
+  line-height: 1.6;
+}
+
+/* Setup page styles */
+.setup-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.setup-box {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 500px;
+  overflow: hidden;
+}
+
+.logo-container {
+  padding: 2rem;
+  text-align: center;
+  background: var(--dark-bg);
+  color: var(--text-light);
+}
+
+.logo-container h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-container {
+  padding: 2rem;
+}
+
+.form-container h2 {
+  margin-bottom: 1.5rem;
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+/* Validation message */
+.validation-message {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  display: none;
+}
+
+.validation-message.error {
+  display: block;
+  background-color: rgba(255, 51, 51, 0.1);
+  border: 1px solid var(--danger-color);
+  color: var(--danger-color);
+}
+
+.validation-message.success {
+  display: block;
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--success-color);
+  color: var(--success-color);
+}
+
+.validation-message.info {
+  display: block;
+  background-color: rgba(0, 102, 255, 0.1);
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+/* Main app styles */
+.app-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  background-color: #f8f9fa;
+  border-right: 1px solid #e9ecef;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.logo {
+  padding: 1.5rem;
+  background: var(--dark-bg);
+  color: var(--text-light);
+}
+
+.logo h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.section {
+  padding: 1.2rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section h2 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+  color: #64748b;
+}
+
+.info-container {
+  background: var(--light-bg);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.info-item {
+  margin-bottom: 0.5rem;
+}
+
+.info-label {
+  font-weight: 500;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.status-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-left: 8px;
+}
+
+.status-online {
+  background-color: #2ecc71;
+}
+
+.status-offline {
+  background-color: #e74c3c;
+}
+
+.status-connecting {
+  background-color: #f1c40f;
+  animation: pulse 1.5s infinite;
+}
+
+.coordinates {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.coordinates div {
+  margin-bottom: 5px;
+  font-size: 13px;
+}
+
+.actions {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-container {
+  flex: 1;
+  position: relative;
+}
+
+#map {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+.controls {
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.control-group {
+  margin-right: 1rem;
+}
+
+.control-group label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.control-group select {
+  min-width: 200px;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+/* Button styles */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-color);
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #ffaa33;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.btn-outline:hover {
+  background-color: var(--light-bg);
+}
+
+.btn-danger {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #ff5252;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Button group */
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .button-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .button-group .btn {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Controls */
+.controls {
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+@media (max-width: 768px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group {
+    margin-right: 0;
+    width: 100%;
+  }
+}
+
+/* Loading animation */
+.loading {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.loading:before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--primary-color);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Marker styles */
+.vehicle-marker {
+  /* Using PNG image now instead of CSS styling */
+  pointer-events: all;
+}
+
+.pickup-marker {
+  /* Using PNG image now instead of CSS styling */
+  pointer-events: all;
+}
+
+/* Animations */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: translateY(-50%) rotate(360deg);
+  }
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-group {
+    margin-right: 0;
+    margin-bottom: 1rem;
+  }
+  
+  .main-content {
+    height: 60vh;
+  }
+}
+
+/* Route details styling */
+.info-section {
+  margin-bottom: 1.5rem;
+}
+
+.info-section h3 {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.route-steps {
+  background: white;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.step-item {
+  display: flex;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.step-number {
+  background: var(--primary-color);
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-instruction {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.step-details {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.more-steps {
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--primary-color);
+  font-size: 0.9rem;
+  background: rgba(0, 102, 255, 0.05);
+}
+
+.congestion-info {
+  background: white;
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.congestion-level {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.congestion-label {
+  width: 100px;
+  font-size: 0.8rem;
+}
+
+.congestion-bar {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.congestion-level.unknown .congestion-bar {
+  background-color: #94a3b8;
+}
+
+.congestion-level.low .congestion-bar {
+  background-color: var(--success-color);
+}
+
+.congestion-level.moderate .congestion-bar {
+  background-color: var(--warning-color);
+}
+
+.congestion-level.heavy .congestion-bar {
+  background-color: var(--danger-color);
+}
+
+.congestion-level.severe .congestion-bar {
+  background-color: #800000;
+}
+
+.waypoints-list {
+  background: white;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.waypoint-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.waypoint-item:last-child {
+  border-bottom: none;
+}
+
+.waypoint-number {
+  background: var(--secondary-color);
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  margin-right: 0.75rem;
+}
+
+.waypoint-name {
+  font-size: 0.9rem;
+}
+
+/* Adding styles for pickup point and waypoint user info */
+
+.pickup-user-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ddd;
+}
+
+.pickup-user-details h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.pickup-user-details p {
+  margin: 4px 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.waypoint-user-info {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #f0f8ff;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.waypoint-user-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.waypoint-user-info p {
+  margin: 2px 0;
+  color: #555;
+}
+
+/* Adding styles for the redesigned sidebar */
+
+/* Organization section */
+.organization-section {
+  margin-bottom: 20px;
+}
+
+/* Vehicle section */
+.vehicle-section {
+  margin-bottom: 20px;
+}
+
+/* Status section */
+.status-section {
+  margin-bottom: 20px;
+}
+
+/* Routes section */
+.routes-section {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Routes container */
+.routes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Route cards */
+.route-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.route-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.route-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
+.route-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.route-body {
+  padding: 12px 15px;
+}
+
+.route-info-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.info-value {
+  color: #212529;
+}
+
+.route-user-info {
+  padding: 12px 15px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+.route-user-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #495057;
+}
+
+.route-user-info p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #495057;
+}
+
+/* Specific route card styles */
+.closest-route {
+  border-left: 4px solid #2ecc71;
+}
+
+.second-route {
+  border-left: 4px solid #f1c40f;
+}
+
+.other-routes-info {
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  color: #495057;
+}
+
+.other-routes-info .route-indicator {
+  margin-right: 10px;
+} 

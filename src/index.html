@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AMEN Vehicle Tracking</title>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css' rel='stylesheet' />
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar with vehicle and organization info -->
+    <aside class="sidebar">
+      <div class="logo">
+        <h1>AMEN</h1>
+        <p>Vehicle Tracking System</p>
+      </div>
+      
+      <!-- Organization section -->
+      <div class="section organization-section">
+        <h2>Organization</h2>
+        <div id="organization-info" class="info-container">
+          <div class="loading">Loading organization details...</div>
+        </div>
+      </div>
+      
+      <!-- Vehicle section -->
+      <div class="section vehicle-section">
+        <h2>Vehicle</h2>
+        <div id="vehicle-info" class="info-container">
+          <div class="loading">Loading vehicle details...</div>
+        </div>
+      </div>
+      
+      <!-- Status section -->
+      <div class="section status-section">
+        <h2>Status</h2>
+        <div class="status-indicator">
+          <span id="connection-status">Connecting...</span>
+          <span id="status-icon" class="status-connecting"></span>
+        </div>
+        <div id="coordinates" class="coordinates">
+          <div><strong>Latitude:</strong> <span id="latitude">--</span></div>
+          <div><strong>Longitude:</strong> <span id="longitude">--</span></div>
+          <div><strong>Speed:</strong> <span id="speed">--</span> km/h</div>
+        </div>
+      </div>
+      
+      <!-- Route Information section -->
+      <div class="section routes-section">
+        <h2>Route Information</h2>
+        <div id="route-info" class="routes-container">
+          <!-- Route info will be displayed here -->
+          <div class="loading">Loading route details...</div>
+        </div>
+      </div>
+      
+      <!-- Actions section -->
+      <div class="actions">
+        <button id="reset-config" class="btn btn-danger">Reset Configuration</button>
+      </div>
+    </aside>
+    
+    <!-- Main content with map -->
+    <main class="main-content">
+      <div class="map-container">
+        <div id="map"></div>
+      </div>
+      
+      <div class="controls">
+        <div class="control-group">
+          <label for="pickup-points">Available Pickup Points:</label>
+          <div id="pickup-points-count" class="info-label">Loading pickup points...</div>
+        </div>
+        
+        <div class="button-group">
+          <button id="show-all-routes-details" class="btn btn-secondary">Refresh Routes</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html> 
