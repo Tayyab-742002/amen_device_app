@@ -1,35 +1,167 @@
 // Supabase client for interacting with the database
 class SupabaseClient {
   constructor() {
-    // Supabase project URL and anon key - these should be replaced with your actual values
-    this.supabaseUrl = 'https://knmhbgyxtpecuftjuheq.supabase.co';
-    this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubWhiZ3l4dHBlY3VmdGp1aGVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMDI5NDUsImV4cCI6MjA1Njc3ODk0NX0.033Si351z1WxyiPUDBUaM_MAHGCjeqiDHGrI7LtWI_Q';
+    // Initialize with null values, will be set after loading
+    this.supabaseUrl = null;
+    this.supabaseKey = null;
+    this.client = null;
     
-    // Load the Supabase JS client
-    this.loadSupabaseClient();
+    console.log('SupabaseClient constructor called');
+    // Load environment variables and initialize client
+    this.init();
+  }
+
+  async init() {
+    try {
+      console.log('SupabaseClient init started');
+      
+      // Get environment variables from Electron main process
+      const envVars = await window.electronAPI.getEnvVars();
+      console.log('Environment variables received:', 
+        envVars ? 'Variables object exists' : 'No variables received');
+      
+      // Set Supabase credentials
+      this.supabaseUrl = envVars.SUPABASE_URL;
+      this.supabaseKey = envVars.SUPABASE_ANON_KEY;
+      
+      console.log('SUPABASE_URL:', this.supabaseUrl ? 'Value exists' : 'Value is missing');
+      console.log('SUPABASE_ANON_KEY:', this.supabaseKey ? 'Value exists' : 'Value is missing');
+      
+      if (!this.supabaseUrl || !this.supabaseKey) {
+        throw new Error('Supabase credentials not found in environment variables');
+      }
+      
+      // Load the Supabase client
+      await this.loadSupabaseClient();
+      
+      console.log('Supabase initialized with environment variables');
+    } catch (error) {
+      console.error('Failed to initialize Supabase with environment variables:', error);
+      alert('Error: Failed to load Supabase credentials. Please check your .env file and restart the application.');
+    }
   }
 
   async loadSupabaseClient() {
     try {
-      // Check if Supabase is already loaded from UMD
-      if (typeof supabase !== 'undefined') {
-        this.client = supabase.createClient(this.supabaseUrl, this.supabaseKey);
-        console.log('Supabase client initialized via UMD');
-        return;
-      }
+      console.log('Loading Supabase client with URL:', this.supabaseUrl);
       
-      // Otherwise try to load it as ESM
+      // Method 1: Try to load via ESM import first (more reliable)
       try {
+        console.log('Attempting to load Supabase via ESM...');
         const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
         this.client = createClient(this.supabaseUrl, this.supabaseKey);
         console.log('Supabase client initialized via ESM');
+        return;
       } catch (esmError) {
-        console.error('Failed to load Supabase client via ESM:', esmError);
-        throw esmError;
+        console.warn('ESM loading failed, trying alternative methods:', esmError);
       }
+      
+      // Method 2: Check if Supabase is loaded via UMD/script tag
+      if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+        console.log('Attempting to load Supabase via global object...');
+        this.client = window.supabase.createClient(this.supabaseUrl, this.supabaseKey);
+        console.log('Supabase client initialized via global object');
+        return;
+      }
+      
+      // Method 3: Check for different global variable names
+      const possibleGlobals = ['supabase', 'Supabase', 'SUPABASE'];
+      for (const globalName of possibleGlobals) {
+        if (typeof window[globalName] !== 'undefined') {
+          console.log(`Found global ${globalName}, checking for createClient...`);
+          
+          // Check if it has createClient method
+          if (window[globalName].createClient) {
+            this.client = window[globalName].createClient(this.supabaseUrl, this.supabaseKey);
+            console.log(`Supabase client initialized via global ${globalName}`);
+            return;
+          }
+          
+          // Check if it's a nested object
+          if (window[globalName].supabase && window[globalName].supabase.createClient) {
+            this.client = window[globalName].supabase.createClient(this.supabaseUrl, this.supabaseKey);
+            console.log(`Supabase client initialized via global ${globalName}.supabase`);
+            return;
+          }
+        }
+      }
+      
+      // Method 4: Try dynamic script loading as last resort
+      console.log('Attempting dynamic script loading...');
+      await this.loadSupabaseScript();
+      
     } catch (error) {
       console.error('Failed to initialize Supabase client:', error);
+      throw error;
     }
+  }
+
+  async loadSupabaseScript() {
+    return new Promise((resolve, reject) => {
+      // Remove any existing Supabase script
+      const existingScript = document.querySelector('script[src*="supabase"]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+      script.onload = () => {
+        console.log('Supabase script loaded dynamically');
+        
+        // Try different ways to access the library
+        let createClient = null;
+        
+        if (window.supabase && window.supabase.createClient) {
+          createClient = window.supabase.createClient;
+        } else if (window.Supabase && window.Supabase.createClient) {
+          createClient = window.Supabase.createClient;
+        } else if (typeof createClient === 'undefined' && window.supabaseCreateClient) {
+          createClient = window.supabaseCreateClient;
+        }
+        
+        if (createClient) {
+          try {
+            this.client = createClient(this.supabaseUrl, this.supabaseKey);
+            console.log('Supabase client initialized via dynamic script loading');
+            resolve();
+          } catch (err) {
+            console.error('Error creating client with dynamic script:', err);
+            reject(err);
+          }
+        } else {
+          console.error('createClient function not found after dynamic loading');
+          console.log('Available globals:', Object.keys(window).filter(key => key.toLowerCase().includes('supabase')));
+          reject(new Error('createClient function not available'));
+        }
+      };
+      
+      script.onerror = (error) => {
+        console.error('Failed to load Supabase script dynamically:', error);
+        reject(error);
+      };
+      
+      document.head.appendChild(script);
+    });
+  }
+
+  // Add a method to check if client is ready
+  isClientReady() {
+    return this.client !== null;
+  }
+
+  // Add a method to wait for client to be ready
+  async waitForClient(timeout = 10000) {
+    const startTime = Date.now();
+    while (!this.isClientReady() && (Date.now() - startTime) < timeout) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    if (!this.isClientReady()) {
+      throw new Error('Supabase client failed to initialize within timeout period');
+    }
+    
+    return this.client;
   }
 
   async getOrganizationDetails(orgId) {
@@ -266,10 +398,69 @@ class SupabaseClient {
       return null;
     }
   }
+  
+  // Get organization settings
+  async getOrganizationSettings(orgId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return null;
+    }
+
+    try {
+      const { data, error } = await this.client
+        .from('organization_settings')
+        .select('*')
+        .eq('organization_id', orgId)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching organization settings:', error);
+      return null;
+    }
+  }
+  
+  // Check if facial recognition is enabled for an organization
+  async isFacialRecognitionEnabled(orgId) {
+    try {
+      const settings = await this.getOrganizationSettings(orgId);
+      return settings ? settings.facial_recognition_enabled : false;
+    } catch (error) {
+      console.error('Error checking facial recognition status:', error);
+      return false;
+    }
+  }
+
+  // Get user images by organization and vehicle
+  async getUserImagesByOrgAndVehicle(orgId, vehicleId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return [];
+    }
+
+    try {
+      const { data, error } = await this.client
+        .rpc('get_user_images_by_org_and_vehicle', {
+          input_org_id: orgId,
+          input_vehicle_id: vehicleId
+        });
+
+      if (error) throw error;
+      
+      // Log the data structure to help with debugging
+      console.log('User images data:', data);
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching user images:', error);
+      return [];
+    }
+  }
 }
 
 // Export a singleton instance
 const supabaseClient = new SupabaseClient();
 
 // Make it available globally
-window.supabase = supabaseClient; 
+window.supabase = supabaseClient;

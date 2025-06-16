@@ -80,10 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (result.success) {
         showMessage('Configuration saved successfully! Redirecting...', 'success');
-        // Wait a moment before reloading to show the success message
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        // The main process will handle the navigation to the main screen
       } else {
         throw new Error('Failed to save configuration');
       }

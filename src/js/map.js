@@ -668,10 +668,15 @@ class MapHandler {
     this.routesDisplayed = false;
   }
 
-  // Resize map if container size changes
+  // Resize map when container size changes
   resizeMap() {
     if (this.map) {
       this.map.resize();
+      
+      // Check if we need to fit to bounds after resize
+      if (this.routesDisplayed && !this.userHasInteracted) {
+        this.fitMapToRoutes();
+      }
     }
   }
   

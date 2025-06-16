@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld(
   'electronAPI', {
     saveConfig: (config) => ipcRenderer.invoke('save-config', config),
     getConfig: () => ipcRenderer.invoke('get-config'),
-    resetConfig: () => ipcRenderer.invoke('reset-config')
+    resetConfig: () => ipcRenderer.invoke('reset-config'),
+    restartApp: () => ipcRenderer.invoke('restart-app'),
+    getEnvVars: () => ipcRenderer.invoke('get-env-vars')
   }
 ); 

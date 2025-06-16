@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const routeInfoEl = document.getElementById('route-info');
   const routeDetailsEl = document.getElementById('route-details');
   const showAllRouteDetailsBtn = document.getElementById('show-all-routes-details');
+  const userImagesContainerEl = document.getElementById('user-images-container');
+  const refreshImagesBtn = document.getElementById('refresh-images');
 
   let config;
   let pickupPoints = [];
@@ -20,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let vehicleSubscription;
   let pickupPointSubscription;
   let routeInfo;
+  let userImages = [];
 
   // Initialize the application
   async function initApp() {
@@ -57,6 +60,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Load pickup points
       loadPickupPoints();
+      
+      // Load user images
+      loadUserImages();
       
       // Subscribe to real-time updates
       setupRealTimeSubscriptions();
@@ -293,6 +299,64 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Load user images
+  async function loadUserImages() {
+    try {
+      userImagesContainerEl.innerHTML = '<div class="loading">Loading user images...</div>';
+      
+      userImages = await window.supabase.getUserImagesByOrgAndVehicle(
+        config.organizationId,
+        config.vehicleId
+      );
+      
+      displayUserImages();
+    } catch (error) {
+      console.error('Error loading user images:', error);
+      userImagesContainerEl.innerHTML = '<div class="error">Failed to load user images</div>';
+    }
+  }
+  
+  // Display user images in the grid
+  function displayUserImages() {
+    if (!userImagesContainerEl) return;
+    
+    if (!userImages || userImages.length === 0) {
+      userImagesContainerEl.innerHTML = `
+        <div class="user-image-item empty">
+          No user images available
+        </div>
+      `;
+      return;
+    }
+    
+    let imagesHtml = '';
+    
+    userImages.forEach((imageData, index) => {
+      const imageUrl = imageData.image_url;
+      // Check if username is available in the data
+      const username = imageData.username || imageData.user_name || `User ${index + 1}`;
+      
+      if (!imageUrl) return;
+      
+      imagesHtml += `
+        <div class="user-image-item" data-index="${index}">
+          <div class="user-image-container">
+            <img src="${imageUrl}" alt="${username}" loading="lazy" />
+          </div>
+          <div class="user-image-username">${username}</div>
+        </div>
+      `;
+    });
+    
+    userImagesContainerEl.innerHTML = imagesHtml || `
+      <div class="user-image-item empty">
+        No valid user images available
+      </div>
+    `;
+    
+    // No click event handlers for images
+  }
+
   // Display route information
   function displayRouteInfo() {
     if (!routeInfoEl) return;
@@ -419,12 +483,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
     
+    // Refresh images button
+    if (refreshImagesBtn) {
+      refreshImagesBtn.addEventListener('click', () => {
+        loadUserImages();
+      });
+    }
+    
     // Reset configuration button
     resetConfigBtn.addEventListener('click', async () => {
-      if (confirm('Are you sure you want to reset the device configuration? This will close the application.')) {
+      if (confirm('Are you sure you want to reset the device configuration? This will restart the application.')) {
         try {
           await window.electronAPI.resetConfig();
-          window.location.reload();
+          // Send message to main process to restart the app
+          window.electronAPI.restartApp();
         } catch (error) {
           console.error('Error resetting configuration:', error);
           alert('Failed to reset configuration');
