@@ -12,7 +12,8 @@
   },
   "devDependencies": {
     "electron": "^36.4.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "electron-dl": "^4.0.0"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.8",

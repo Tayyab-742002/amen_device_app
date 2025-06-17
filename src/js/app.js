@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const showAllRouteDetailsBtn = document.getElementById('show-all-routes-details');
   const userImagesContainerEl = document.getElementById('user-images-container');
   const refreshImagesBtn = document.getElementById('refresh-images');
+  const downloadImagesBtn = document.getElementById('download-images');
 
   let config;
   let pickupPoints = [];
@@ -476,38 +477,146 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Setup event listeners
   function setupEventListeners() {
-    // Show route details button
-    if (showAllRouteDetailsBtn) {
-      showAllRouteDetailsBtn.addEventListener('click', () => {
-        displayRouteInfo();
-      });
-    }
-    
-    // Refresh images button
-    if (refreshImagesBtn) {
-      refreshImagesBtn.addEventListener('click', () => {
-        loadUserImages();
-      });
-    }
-    
-    // Reset configuration button
+    // Reset configuration
     resetConfigBtn.addEventListener('click', async () => {
-      if (confirm('Are you sure you want to reset the device configuration? This will restart the application.')) {
-        try {
-          await window.electronAPI.resetConfig();
-          // Send message to main process to restart the app
-          window.electronAPI.restartApp();
-        } catch (error) {
-          console.error('Error resetting configuration:', error);
-          alert('Failed to reset configuration');
-        }
+      if (confirm('Are you sure you want to reset the device configuration? This will log you out.')) {
+        await window.electronAPI.resetConfig();
+        window.electronAPI.restartApp();
       }
     });
     
-    // Handle window unload to clean up subscriptions
+    // Show all routes details
+    showAllRouteDetailsBtn.addEventListener('click', () => {
+      mapHandler.showAllRoutes();
+    });
+    
+    // Refresh images
+    refreshImagesBtn.addEventListener('click', () => {
+      loadUserImages();
+    });
+    
+    // Download images
+    downloadImagesBtn.addEventListener('click', () => {
+      downloadUserImages();
+    });
+    
+    // Clean up subscriptions when the window is closed
     window.addEventListener('beforeunload', () => {
       cleanupSubscriptions();
     });
+  }
+  
+  // Download user images
+  async function downloadUserImages() {
+    if (!userImages || userImages.length === 0) {
+      alert('No user images available to download.');
+      return;
+    }
+    
+    try {
+      downloadImagesBtn.disabled = true;
+      downloadImagesBtn.textContent = 'Downloading...';
+      
+      // Create status element for feedback
+      const statusEl = document.createElement('div');
+      statusEl.className = 'download-status';
+      statusEl.textContent = 'Preparing to download images...';
+      userImagesContainerEl.parentNode.insertBefore(statusEl, userImagesContainerEl.nextSibling);
+      
+      // Track progress
+      let downloaded = 0;
+      let failed = 0;
+      const total = userImages.length;
+      let folderPath = '';
+      
+      // Process each image
+      for (const userImage of userImages) {
+        if (!userImage.image_url || !userImage.username) {
+          failed++;
+          continue;
+        }
+        
+        try {
+          // Update status
+          statusEl.textContent = `Downloading image ${downloaded + failed + 1} of ${total}...`;
+          
+          // Determine file extension from URL
+          let fileExtension = '.jpg'; // Default extension
+          if (userImage.image_url.includes('.')) {
+            const urlParts = userImage.image_url.split('.');
+            const extension = urlParts[urlParts.length - 1].split('?')[0].toLowerCase();
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)) {
+              fileExtension = '.' + extension;
+            }
+          }
+          
+          // Create a safe filename from username (remove invalid characters)
+          const safeUsername = userImage.username.replace(/[^\w\s.-]/gi, '_');
+          
+          // Use IPC to download the image to the Reference_images folder
+          const result = await window.electronAPI.downloadImage({
+            url: userImage.image_url,
+            username: safeUsername,
+            extension: fileExtension
+          });
+          
+          if (result.success) {
+            downloaded++;
+            statusEl.textContent = `Downloaded ${downloaded} of ${total} images...`;
+            
+            // Save the folder path for display
+            if (!folderPath && result.folderPath) {
+              folderPath = result.folderPath;
+            }
+          } else {
+            throw new Error(result.error || 'Failed to download image');
+          }
+          
+        } catch (imageError) {
+          console.error(`Failed to download image for ${userImage.username}:`, imageError);
+          failed++;
+          statusEl.textContent = `Error downloading image for ${userImage.username}...`;
+        }
+      }
+      
+      // Final status update
+      if (failed > 0) {
+        statusEl.textContent = `Completed: Downloaded ${downloaded} images to Reference_images folder. ${failed} images failed.`;
+        statusEl.style.color = 'var(--warning-color)';
+      } else {
+        statusEl.textContent = `Successfully downloaded all ${downloaded} images to Reference_images folder!`;
+        statusEl.style.color = 'var(--success-color)';
+      }
+      
+      // Show the path where images were saved
+      if (folderPath) {
+        const pathEl = document.createElement('div');
+        pathEl.className = 'download-path';
+        pathEl.textContent = `Images saved to: ${folderPath}`;
+        statusEl.parentNode.insertBefore(pathEl, statusEl.nextSibling);
+        
+        // Remove path element after a delay
+        setTimeout(() => {
+          if (pathEl.parentNode) {
+            pathEl.parentNode.removeChild(pathEl);
+          }
+        }, 10000);
+      }
+      
+      // Remove status element after a delay
+      setTimeout(() => {
+        if (statusEl.parentNode) {
+          statusEl.parentNode.removeChild(statusEl);
+        }
+      }, 5000);
+      
+    } catch (error) {
+      console.error('Error downloading user images:', error);
+      alert('Failed to download user images. See console for details.');
+    } finally {
+      downloadImagesBtn.disabled = false;
+      downloadImagesBtn.textContent = 'Download Images';
+    }
   }
   
   // Clean up subscriptions
