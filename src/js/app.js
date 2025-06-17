@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const userImagesContainerEl = document.getElementById('user-images-container');
   const refreshImagesBtn = document.getElementById('refresh-images');
   const downloadImagesBtn = document.getElementById('download-images');
+  const verifyUserBtn = document.getElementById('verify-user');
 
   let config;
   let pickupPoints = [];
@@ -500,6 +501,39 @@ document.addEventListener('DOMContentLoaded', async () => {
       downloadUserImages();
     });
     
+    // Verify user
+    verifyUserBtn.addEventListener('click', async () => {
+      try {
+        // Disable the button during verification
+        verifyUserBtn.disabled = true;
+        verifyUserBtn.textContent = 'Verifying...';
+        
+        // Show a notification that verification is starting
+        showNotification('Starting face verification...', 'info');
+        
+        // Run the face verification process
+        const result = await window.electronAPI.runFaceVerification();
+        
+        if (result && result.success) {
+          // Update UI to show verified user
+          showNotification(`User verified: ${result.person_name} (${result.confidence.toFixed(1)}%)`, 'success');
+          
+          // Mark the user as verified in the UI
+          markUserAsVerified(result.person_name);
+        } else {
+          // Show error notification
+          showNotification(result.error || 'Verification failed or was cancelled', 'error');
+        }
+      } catch (error) {
+        console.error('Error during face verification:', error);
+        showNotification(`Error: ${error.message}`, 'error');
+      } finally {
+        // Re-enable the button
+        verifyUserBtn.disabled = false;
+        verifyUserBtn.textContent = 'User Verification';
+      }
+    });
+    
     // Clean up subscriptions when the window is closed
     window.addEventListener('beforeunload', () => {
       cleanupSubscriptions();
@@ -671,6 +705,51 @@ document.addEventListener('DOMContentLoaded', async () => {
       default:
         statusIconEl.classList.add('status-connecting');
     }
+  }
+
+  // Show a notification to the user
+  function showNotification(message, type = 'info') {
+    // Create notification element if it doesn't exist
+    let notificationEl = document.getElementById('notification');
+    if (!notificationEl) {
+      notificationEl = document.createElement('div');
+      notificationEl.id = 'notification';
+      document.body.appendChild(notificationEl);
+    }
+    
+    // Set notification content and type
+    notificationEl.textContent = message;
+    notificationEl.className = `notification ${type}`;
+    
+    // Show notification
+    notificationEl.style.display = 'block';
+    
+    // Hide after 5 seconds
+    setTimeout(() => {
+      notificationEl.style.display = 'none';
+    }, 5000);
+  }
+  
+  // Mark a user as verified in the UI
+  function markUserAsVerified(username) {
+    // Find the user image element
+    const userImages = document.querySelectorAll('.user-image-item');
+    
+    userImages.forEach(userImage => {
+      const usernameEl = userImage.querySelector('.user-image-username');
+      if (usernameEl && usernameEl.textContent.includes(username)) {
+        // Add verified class to the user image
+        userImage.classList.add('verified');
+        
+        // Add verified badge if it doesn't exist
+        if (!userImage.querySelector('.verified-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'verified-badge';
+          badge.innerHTML = '✓';
+          userImage.appendChild(badge);
+        }
+      }
+    });
   }
 
   // Initialize the application

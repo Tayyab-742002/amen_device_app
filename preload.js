@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld(
     resetConfig: () => ipcRenderer.invoke('reset-config'),
     restartApp: () => ipcRenderer.invoke('restart-app'),
     getEnvVars: () => ipcRenderer.invoke('get-env-vars'),
-    downloadImage: (imageData) => ipcRenderer.invoke('download-images', imageData)
+    downloadImage: (imageData) => ipcRenderer.invoke('download-images', imageData),
+    runFaceVerification: () => ipcRenderer.invoke('run-face-verification')
   }
 ); 

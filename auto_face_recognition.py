@@ -17,6 +17,24 @@ import datetime
 import threading
 import queue
 import shutil
+import json
+
+# Function to safely print text without emoji characters
+def safe_print(text):
+    """Print text safely without emoji characters that might cause encoding issues"""
+    # Replace common emoji with text equivalents
+    text = (text.replace("🔬", "[MICROSCOPE]")
+                .replace("📸", "[CAMERA]")
+                .replace("👀", "[EYES]")
+                .replace("✅", "[OK]")
+                .replace("❌", "[ERROR]")
+                .replace("⚠️", "[WARNING]")
+                .replace("🔍", "[SEARCH]")
+                .replace("🗑️", "[DELETE]")
+                .replace("⏱️", "[TIMER]"))
+    
+    # Print the clean text
+    print(text)
 
 class AutoFaceRecognition:
     def __init__(self, api_key: str, api_secret: str):
@@ -84,7 +102,7 @@ class AutoFaceRecognition:
         if file_size_kb <= max_size_kb:
             return image_path
             
-        print(f"⚠️  Image is {file_size_kb:.1f}KB, resizing to fit API limits...")
+        safe_print(f"Image is {file_size_kb:.1f}KB, resizing to fit API limits...")
         
         try:
             # Open and resize image
@@ -123,14 +141,14 @@ class AutoFaceRecognition:
                     temp_file = temp_path
                     
             if temp_file:
-                print(f"✅ Resized to {file_size_kb:.1f}KB")
+                safe_print(f"Resized to {file_size_kb:.1f}KB")
                 return temp_file
             else:
-                print("❌ Could not resize image sufficiently")
+                safe_print("Could not resize image sufficiently")
                 return image_path
                 
         except Exception as e:
-            print(f"❌ Error resizing image: {str(e)}")
+            safe_print(f"Error resizing image: {str(e)}")
             return image_path
     
     def save_frame_to_temp(self, frame) -> str:
@@ -175,7 +193,7 @@ class AutoFaceRecognition:
         
         # Save the image
         cv2.imwrite(filepath, frame)
-        print(f"✅ Saved captured face to {filepath}")
+        safe_print(f"Saved captured face to {filepath}")
         
         # Add to captured files for cleanup
         self.captured_files[filepath] = time.time()
@@ -251,26 +269,26 @@ class AutoFaceRecognition:
         highest_confidence = 0
         recognized_person = "Unknown"
         
-        print(f"🔍 Verifying captured face against {len(self.reference_images)} reference images...")
+        safe_print(f"Verifying captured face against {len(self.reference_images)} reference images...")
         
         # Compare with all reference images
         for person_name, ref_image_path in self.reference_images.items():
-            print(f"  Comparing with {person_name}...")
+            safe_print(f"  Comparing with {person_name}...")
             result = self.compare_faces(captured_image_path, ref_image_path)
             
             if "error" not in result:
                 confidence = result.get('confidence', 0)
-                print(f"  Confidence: {confidence:.1f}%")
+                safe_print(f"  Confidence: {confidence:.1f}%")
                 
                 if confidence > highest_confidence:
                     highest_confidence = confidence
                     recognized_person = person_name
             else:
-                print(f"  Error: {result.get('error')}")
+                safe_print(f"  Error: {result.get('error')}")
         
         # Return result based on confidence threshold
         verification_status = "VERIFIED" if highest_confidence >= self.min_confidence else "NOT VERIFIED"
-        print(f"✅ Verification result: {verification_status} as {recognized_person} ({highest_confidence:.1f}%)")
+        safe_print(f"Verification result: {verification_status} as {recognized_person} ({highest_confidence:.1f}%)")
         
         if highest_confidence >= self.min_confidence:
             return recognized_person, highest_confidence
@@ -314,7 +332,7 @@ class AutoFaceRecognition:
                 # Queue is empty, just continue
                 continue
             except Exception as e:
-                print(f"❌ Error in verification worker: {str(e)}")
+                safe_print(f"Error in verification worker: {str(e)}")
     
     def cleanup_worker(self):
         """
@@ -335,16 +353,16 @@ class AutoFaceRecognition:
                     try:
                         if os.path.exists(filepath):
                             os.remove(filepath)
-                            print(f"🗑️ Deleted old captured image: {filepath}")
+                            safe_print(f"Deleted old captured image: {filepath}")
                         self.captured_files.pop(filepath)
                     except Exception as e:
-                        print(f"❌ Error deleting file {filepath}: {str(e)}")
+                        safe_print(f"Error deleting file {filepath}: {str(e)}")
                 
                 # Sleep for a while
                 time.sleep(5)
                 
             except Exception as e:
-                print(f"❌ Error in cleanup worker: {str(e)}")
+                safe_print(f"Error in cleanup worker: {str(e)}")
                 time.sleep(5)
     
     def calculate_face_stability(self, face_positions: List[Tuple[int, int, int, int]]) -> float:
@@ -405,11 +423,11 @@ class AutoFaceRecognition:
         """
         # Check if reference directory exists
         if not os.path.isdir(self.reference_dir):
-            print(f"⚠️  Reference directory '{self.reference_dir}' not found. Creating directory...")
+            safe_print(f"Reference directory '{self.reference_dir}' not found. Creating directory...")
             os.makedirs(self.reference_dir)
-            print(f"✅ Please add reference images to '{self.reference_dir}' directory")
-            print("   Each image should contain one face and be named after the person")
-            print("   Example: 'john_smith.jpg'")
+            safe_print(f"Please add reference images to '{self.reference_dir}' directory")
+            safe_print("   Each image should contain one face and be named after the person")
+            safe_print("   Example: 'john_smith.jpg'")
             return False
         
         # Get reference images
@@ -421,12 +439,12 @@ class AutoFaceRecognition:
                 self.reference_images[person_name] = image_path
         
         if not self.reference_images:
-            print(f"⚠️  No reference images found in '{self.reference_dir}'")
-            print("   Please add reference images named after each person")
-            print("   Example: 'john_smith.jpg'")
+            safe_print(f"No reference images found in '{self.reference_dir}'")
+            safe_print("   Please add reference images named after each person")
+            safe_print("   Example: 'john_smith.jpg'")
             return False
         
-        print(f"✅ Loaded {len(self.reference_images)} reference images")
+        safe_print(f"Loaded {len(self.reference_images)} reference images")
         return True
     
     def start_verification_thread(self):
@@ -460,11 +478,15 @@ class AutoFaceRecognition:
         if self.cleanup_thread and self.cleanup_thread.is_alive():
             self.cleanup_thread.join(timeout=2)
     
-    def run(self):
+    def run(self, auto_close=False, result_file_path=None):
         """
         Run the automated facial recognition system
+        
+        Args:
+            auto_close: Whether to automatically close after successful verification
+            result_file_path: Path to save verification result as JSON
         """
-        print("\n📸 Starting Automated Facial Recognition...")
+        safe_print("\nStarting Automated Facial Recognition...")
         
         # Load reference images
         if not self.load_reference_images():
@@ -480,24 +502,83 @@ class AutoFaceRecognition:
         try:
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
-                print("❌ Could not open webcam")
+                safe_print("Could not open webcam")
                 return
                 
             # Set landscape mode (higher width than height)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         except Exception as e:
-            print(f"❌ Error initializing webcam: {str(e)}")
+            safe_print(f"Error initializing webcam: {str(e)}")
             return
         
-        print("\n👀 Looking for faces... (Press 'q' to quit)")
+        safe_print("\nLooking for faces... (Press 'q' to quit)")
+        
+        # Variables for auto-close
+        verification_successful = False
+        verification_result = None
+        
+        # Set timeout for auto-close mode
+        start_time = time.time()
+        timeout = 30  # 30 seconds timeout for auto-close mode
         
         # Main loop
         while True:
             # Capture frame
             ret, frame = cap.read()
             if not ret:
-                print("❌ Failed to capture frame")
+                safe_print("Failed to capture frame")
+                break
+                
+            # Check if verification was successful and auto-close is enabled
+            if auto_close and self.verification_results:
+                person_name, confidence, _ = self.verification_results
+                if confidence >= self.min_confidence:
+                    verification_successful = True
+                    verification_result = {
+                        "success": True,
+                        "person_name": person_name,
+                        "confidence": confidence
+                    }
+                    
+                    # Print result for IPC communication
+                    result_json = json.dumps(verification_result)
+                    print(f"VERIFICATION_COMPLETE: {result_json}", flush=True)
+                    
+                    # Save result to file if specified
+                    if result_file_path:
+                        try:
+                            with open(result_file_path, 'w') as f:
+                                f.write(result_json)
+                            safe_print(f"Saved verification result to {result_file_path}")
+                        except Exception as e:
+                            safe_print(f"Error saving verification result: {str(e)}")
+                    
+                    # Break the loop to close
+                    break
+            
+            # Check for timeout in auto-close mode
+            if auto_close and (time.time() - start_time > timeout):
+                safe_print(f"Timeout after {timeout} seconds")
+                verification_result = {
+                    "success": False,
+                    "error": "Verification timed out"
+                }
+                
+                # Print result for IPC communication
+                result_json = json.dumps(verification_result)
+                print(f"VERIFICATION_COMPLETE: {result_json}", flush=True)
+                
+                # Save result to file if specified
+                if result_file_path:
+                    try:
+                        with open(result_file_path, 'w') as f:
+                            f.write(result_json)
+                        safe_print(f"Saved timeout result to {result_file_path}")
+                    except Exception as e:
+                        safe_print(f"Error saving timeout result: {str(e)}")
+                
+                # Break the loop to close
                 break
             
             # Create display frame
@@ -581,7 +662,7 @@ class AutoFaceRecognition:
                             
                             if stability >= self.stability_threshold:
                                 # Face was stable, capture it
-                                print(f"✅ Face stable ({stability:.2f}), capturing...")
+                                safe_print(f"Face stable ({stability:.2f}), capturing...")
                                 
                                 # Save frame to temp file for verification
                                 temp_path = self.save_frame_to_temp(frame)
@@ -597,7 +678,7 @@ class AutoFaceRecognition:
                                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                             else:
                                 # Face was not stable enough
-                                print(f"❌ Face not stable enough ({stability:.2f}), cancelling capture")
+                                safe_print(f"Face not stable enough ({stability:.2f}), cancelling capture")
                                 cv2.putText(display_frame, "Too much movement", (x, y - 10), 
                                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                             
@@ -611,14 +692,14 @@ class AutoFaceRecognition:
                         self.countdown_start_time = current_time
                         self.face_positions = [largest_face]
                         
-                        print("🔍 Face in range, starting countdown...")
+                        safe_print("Face in range, starting countdown...")
                         cv2.putText(display_frame, "Starting countdown...", (x, y - 10), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 else:
                     # Face is too small/far away
                     if self.countdown_active:
                         # Cancel countdown
-                        print("❌ Face moved out of range, cancelling countdown")
+                        safe_print("Face moved out of range, cancelling countdown")
                         self.countdown_active = False
                         self.face_positions = []
                     
@@ -628,7 +709,7 @@ class AutoFaceRecognition:
                 # No faces detected
                 if self.countdown_active:
                     # Cancel countdown
-                    print("❌ Face lost, cancelling countdown")
+                    safe_print("Face lost, cancelling countdown")
                     self.countdown_active = False
                     self.face_positions = []
             
@@ -644,32 +725,79 @@ class AutoFaceRecognition:
         cv2.destroyAllWindows()
         self.stop_verification_thread()
         self.stop_cleanup_thread()
-        print("📷 Webcam released")
+        safe_print("Webcam released")
 
 def main():
     """
     Main function to run the automated facial recognition system
     """
-    # Load environment variables from .env file
-    load_dotenv()
+    try:
+        # Load environment variables from .env file
+        load_dotenv()
+        
+        safe_print("Automated Face Recognition System")
+        safe_print("=" * 50)
+        
+        # Parse command-line arguments
+        import argparse
+        parser = argparse.ArgumentParser(description='Automated Face Recognition System')
+        parser.add_argument('--reference-dir', type=str, help='Directory containing reference images')
+        parser.add_argument('--captured-dir', type=str, help='Directory to save captured faces')
+        parser.add_argument('--result-file', type=str, help='File to save verification result')
+        parser.add_argument('--auto-close', action='store_true', help='Auto-close after successful verification')
+        args = parser.parse_args()
+        
+        # Get API credentials from environment variables
+        API_KEY = os.getenv("FACEPP_API_KEY", "")
+        API_SECRET = os.getenv("FACEPP_API_SECRET", "")
+        
+        if not API_KEY or not API_SECRET or API_KEY == "YOUR_API_KEY_HERE" or API_SECRET == "YOUR_API_SECRET_HERE":
+            safe_print("[ERROR] Please set FACEPP_API_KEY and FACEPP_API_SECRET in your .env file")
+            safe_print("   Get them from: https://console.faceplusplus.com/")
+            
+            # Report error through JSON if result file is specified
+            if args.result_file:
+                error_result = {"success": False, "error": "API credentials not found"}
+                with open(args.result_file, 'w') as f:
+                    f.write(json.dumps(error_result))
+                print(f"VERIFICATION_COMPLETE: {json.dumps(error_result)}", flush=True)
+            return
+        
+        # Initialize the system
+        system = AutoFaceRecognition(API_KEY, API_SECRET)
+        
+        # Set directories if provided
+        if args.reference_dir:
+            system.reference_dir = args.reference_dir
+            safe_print(f"Using reference directory: {args.reference_dir}")
+        
+        if args.captured_dir:
+            system.captured_faces_dir = args.captured_dir
+            safe_print(f"Using captured faces directory: {args.captured_dir}")
+        
+        # Store result file path
+        result_file_path = args.result_file if args.result_file else None
+        
+        # Run the system with auto-close option if specified
+        system.run(auto_close=args.auto_close, result_file_path=result_file_path)
     
-    print("🔬 Automated Face Recognition System")
-    print("=" * 50)
-    
-    # Get API credentials from environment variables
-    API_KEY = os.getenv("FACEPP_API_KEY", "")
-    API_SECRET = os.getenv("FACEPP_API_SECRET", "")
-    
-    if not API_KEY or not API_SECRET or API_KEY == "YOUR_API_KEY_HERE" or API_SECRET == "YOUR_API_SECRET_HERE":
-        print("❌ Please set FACEPP_API_KEY and FACEPP_API_SECRET in your .env file")
-        print("   Get them from: https://console.faceplusplus.com/")
-        return
-    
-    # Initialize the system
-    system = AutoFaceRecognition(API_KEY, API_SECRET)
-    
-    # Run the system with default Reference_Images directory
-    system.run()
+    except Exception as e:
+        # Handle any unexpected errors
+        error_message = f"Unexpected error: {str(e)}"
+        safe_print(f"[ERROR] {error_message}")
+        
+        # Report error through JSON if possible
+        error_result = {"success": False, "error": error_message}
+        
+        try:
+            if 'args' in locals() and args.result_file:
+                with open(args.result_file, 'w') as f:
+                    f.write(json.dumps(error_result))
+            
+            print(f"VERIFICATION_COMPLETE: {json.dumps(error_result)}", flush=True)
+        except Exception:
+            # Last resort error reporting
+            print(f"VERIFICATION_COMPLETE: {json.dumps({'success': False, 'error': 'Fatal error'})}", flush=True)
 
 if __name__ == "__main__":
     main() 
