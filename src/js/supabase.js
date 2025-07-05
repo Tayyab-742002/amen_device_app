@@ -164,6 +164,29 @@ class SupabaseClient {
     return this.client;
   }
 
+  // Test the connection
+  async testConnection() {
+    if (!this.client) {
+      return { connected: false, error: 'Client not initialized' };
+    }
+
+    try {
+      // Try a simple query to test the connection
+      const { data, error } = await this.client
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (error) {
+        return { connected: false, error: error.message };
+      }
+
+      return { connected: true, data };
+    } catch (error) {
+      return { connected: false, error: error.message };
+    }
+  }
+
   async getOrganizationDetails(orgId) {
     if (!this.client) {
       console.error('Supabase client not initialized');
@@ -297,7 +320,9 @@ class SupabaseClient {
       return null;
     }
 
-    return this.client
+    console.log(`Setting up location subscription for vehicle ${vehicleId}`);
+    
+    const channel = this.client
       .channel(`location_updates:${vehicleId}`)
       .on(
         'postgres_changes',
@@ -307,9 +332,16 @@ class SupabaseClient {
           table: 'location_data',
           filter: `vehicle_id=eq.${vehicleId}`
         },
-        (payload) => callback(payload.new || payload.old, payload.eventType)
+        (payload) => {
+          console.log('Location data received via subscription:', payload);
+          callback(payload.new || payload.old, payload.eventType);
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Location subscription status: ${status}`);
+      });
+    
+    return channel;
   }
   
   // Subscribe to real-time changes in vehicle status
@@ -319,7 +351,9 @@ class SupabaseClient {
       return null;
     }
 
-    return this.client
+    console.log(`Setting up vehicle subscription for vehicle ${vehicleId}`);
+    
+    const channel = this.client
       .channel(`vehicle_updates:${vehicleId}`)
       .on(
         'postgres_changes',
@@ -329,9 +363,16 @@ class SupabaseClient {
           table: 'vehicles',
           filter: `id=eq.${vehicleId}`
         },
-        (payload) => callback(payload.new || payload.old, payload.eventType)
+        (payload) => {
+          console.log('Vehicle data received via subscription:', payload);
+          callback(payload.new || payload.old, payload.eventType);
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Vehicle subscription status: ${status}`);
+      });
+    
+    return channel;
   }
   
   // Subscribe to real-time changes in pickup points for an organization
@@ -341,7 +382,9 @@ class SupabaseClient {
       return null;
     }
 
-    return this.client
+    console.log(`Setting up pickup point subscription for organization ${orgId}`);
+    
+    const channel = this.client
       .channel(`pickup_point_updates:${orgId}`)
       .on(
         'postgres_changes',
@@ -352,6 +395,8 @@ class SupabaseClient {
           filter: `org_id=eq.${orgId}`
         },
         async (payload) => {
+          console.log('Pickup point data received via subscription:', payload);
+          
           // If this is a new or updated pickup point, enrich with user details
           let pickupPoint = payload.new || payload.old;
           
@@ -374,7 +419,11 @@ class SupabaseClient {
           callback(pickupPoint, payload.eventType);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Pickup point subscription status: ${status}`);
+      });
+    
+    return channel;
   }
   
   // Get user details by user ID
@@ -455,6 +504,83 @@ class SupabaseClient {
     } catch (error) {
       console.error('Error fetching user images:', error);
       return [];
+    }
+  }
+
+  // Start route for a vehicle
+  async startRoute(vehicleId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      const { data, error } = await this.client
+        .from('vehicles')
+        .update({ route_started: true })
+        .eq('id', vehicleId)
+        .select();
+
+      if (error) throw error;
+      
+      console.log('Route started for vehicle:', vehicleId);
+      return { success: true, data: data };
+    } catch (error) {
+      console.error('Error starting route:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Stop route for a vehicle
+  async stopRoute(vehicleId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      const { data, error } = await this.client
+        .from('vehicles')
+        .update({ route_started: false })
+        .eq('id', vehicleId)
+        .select();
+
+      if (error) throw error;
+      
+      console.log('Route stopped for vehicle:', vehicleId);
+      return { success: true, data: data };
+    } catch (error) {
+      console.error('Error stopping route:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Send emergency alert
+  async sendEmergencyAlert(vehicleId, organizationId, emergencyType) {
+    try {
+      const response = await fetch('https://knmhbgyxtpecuftjuheq.supabase.co/functions/v1/emergency-alert', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer amen',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vehicleId: vehicleId,
+          organizationId: organizationId,
+          emergencyType: emergencyType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Emergency alert sent successfully:', data);
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error sending emergency alert:', error);
+      return { success: false, error: error.message };
     }
   }
 }

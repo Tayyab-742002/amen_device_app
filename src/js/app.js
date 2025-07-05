@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const refreshImagesBtn = document.getElementById('refresh-images');
   const downloadImagesBtn = document.getElementById('download-images');
   const verifyUserBtn = document.getElementById('verify-user');
+  const startRouteBtn = document.getElementById('start-route');
 
   let config;
   let pickupPoints = [];
@@ -49,6 +50,15 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw new Error('Could not connect to Supabase');
         }
       }
+
+      // Test the connection
+      console.log('Testing Supabase connection...');
+      const connectionTest = await window.supabase.testConnection();
+      if (!connectionTest.connected) {
+        console.error('Supabase connection test failed:', connectionTest.error);
+        throw new Error(`Database connection failed: ${connectionTest.error}`);
+      }
+      console.log('Supabase connection test passed');
 
       // Initialize map
       const initialLocation = await window.supabase.getVehicleLocation(config.vehicleId);
@@ -85,26 +95,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Subscribe to real-time updates
   function setupRealTimeSubscriptions() {
     try {
+      console.log('Setting up real-time subscriptions...');
+      
+      // Clean up existing subscriptions first
+      cleanupSubscriptions();
+      
       // Subscribe to location updates
+      console.log(`Subscribing to location updates for vehicle ${config.vehicleId}`);
       locationSubscription = window.supabase.subscribeToLocationUpdates(
         config.vehicleId,
         handleLocationUpdate
       );
       
       // Subscribe to vehicle status updates
+      console.log(`Subscribing to vehicle updates for vehicle ${config.vehicleId}`);
       vehicleSubscription = window.supabase.subscribeToVehicleUpdates(
         config.vehicleId,
         handleVehicleUpdate
       );
       
       // Subscribe to pickup point updates
+      console.log(`Subscribing to pickup point updates for organization ${config.organizationId}`);
       pickupPointSubscription = window.supabase.subscribeToPickupPointUpdates(
         config.organizationId,
         handlePickupPointUpdate
       );
       
-      // Initially set status to connecting until we get a vehicle update
-      setConnectionStatus('connecting', 'Connecting to vehicle...');
+      // Check subscription status
+      if (locationSubscription && vehicleSubscription && pickupPointSubscription) {
+        console.log('All subscriptions set up successfully');
+        setConnectionStatus('connecting', 'Connecting to vehicle...');
+        
+        // Set up periodic connection check
+        setupConnectionCheck();
+      } else {
+        console.error('Failed to set up one or more subscriptions');
+        setConnectionStatus('offline', 'Failed to connect');
+      }
     } catch (error) {
       console.error('Error setting up real-time subscriptions:', error);
       setConnectionStatus('offline', 'Disconnected');
@@ -113,6 +140,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Handle location update
   function handleLocationUpdate(locationData, eventType) {
+    console.log('Location update received:', locationData, eventType);
+    
     if (!locationData || eventType === 'DELETE') return;
     
     // Update coordinates display
@@ -122,10 +151,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Update vehicle marker on map
     mapHandler.updateVehiclePosition(locationData.longitude, locationData.latitude);
+    
+    // Only update routes if location has changed significantly (more than 10 meters)
+    const currentLocation = { lat: locationData.latitude, lng: locationData.longitude };
+    if (shouldUpdateRoutes(currentLocation)) {
+      // Debounce route updates to prevent excessive API calls
+      clearTimeout(window.routeUpdateTimeout);
+      window.routeUpdateTimeout = setTimeout(() => {
+        mapHandler.updateRoutesSmooth();
+      }, 2000); // Wait 2 seconds before updating routes
+    }
+    
+    // Update last location update time
+    window.lastLocationUpdate = Date.now();
   }
   
   // Handle vehicle update
   function handleVehicleUpdate(vehicleData, eventType) {
+    console.log('Vehicle update received:', vehicleData, eventType);
+    
     if (!vehicleData || eventType === 'DELETE') return;
     
     // Update vehicle info in the sidebar
@@ -148,6 +192,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       ` : ''}
     `;
     
+    // Update start route button based on route_started status
+    updateStartRouteButton(vehicleData.route_started);
+    
     // Update connection status based on vehicle status
     const status = vehicleData.status ? vehicleData.status.toLowerCase() : 'unknown';
     
@@ -162,10 +209,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       setConnectionStatus('connecting', `Vehicle status: ${vehicleData.status || 'unknown'}`);
     }
+    
+    // Update last vehicle update time
+    window.lastVehicleUpdate = Date.now();
   }
   
   // Handle pickup point update
   function handlePickupPointUpdate(pickupPointData, eventType) {
+    console.log('Pickup point update received:', pickupPointData, eventType);
+    
     if (!pickupPointData) return;
     
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -190,8 +242,91 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update pickup point count
     pickupPointsCountEl.textContent = `${pickupPoints.length} pickup points available`;
     
-    // Update routes if we have a vehicle position
-    mapHandler.showAllRoutes();
+    // Debounce route updates for pickup point changes
+    clearTimeout(window.pickupRouteUpdateTimeout);
+    window.pickupRouteUpdateTimeout = setTimeout(() => {
+      mapHandler.updateRoutesSmooth();
+    }, 1000); // Wait 1 second before updating routes
+    
+    // Update last pickup point update time
+    window.lastPickupPointUpdate = Date.now();
+  }
+
+  // Set up periodic connection check
+  function setupConnectionCheck() {
+    // Initialize update timestamps
+    window.lastLocationUpdate = Date.now();
+    window.lastVehicleUpdate = Date.now();
+    window.lastPickupPointUpdate = Date.now();
+    
+    // Check connection every 30 seconds
+    setInterval(() => {
+      const now = Date.now();
+      const locationAge = now - (window.lastLocationUpdate || 0);
+      const vehicleAge = now - (window.lastVehicleUpdate || 0);
+      
+      // If we haven't received updates for more than 2 minutes, try to reconnect
+      if (locationAge > 120000 || vehicleAge > 120000) {
+        console.log('Connection seems stale, attempting to reconnect...');
+        reconnectRealTime();
+      }
+    }, 30000);
+  }
+
+  // Reconnect real-time subscriptions
+  function reconnectRealTime() {
+    console.log('Reconnecting real-time subscriptions...');
+    setConnectionStatus('connecting', 'Reconnecting...');
+    
+    // Clean up existing subscriptions
+    cleanupSubscriptions();
+    
+    // Wait a moment then reconnect
+    setTimeout(() => {
+      setupRealTimeSubscriptions();
+    }, 1000);
+  }
+
+  // Check if routes should be updated based on location change
+  function shouldUpdateRoutes(newLocation) {
+    if (!window.lastKnownLocation) {
+      window.lastKnownLocation = newLocation;
+      return true;
+    }
+    
+    // Calculate distance moved since last route update
+    const distance = calculateDistance(
+      window.lastKnownLocation.lat, 
+      window.lastKnownLocation.lng,
+      newLocation.lat, 
+      newLocation.lng
+    );
+    
+    // Only update if moved more than 10 meters
+    if (distance > 0.01) { // 0.01 km = 10 meters
+      window.lastKnownLocation = newLocation;
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Calculate distance between two points (in km)
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2); 
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    const d = R * c; // Distance in km
+    return d;
+  }
+
+  function deg2rad(deg) {
+    return deg * (Math.PI/180);
   }
 
   // Load organization details
@@ -241,6 +376,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           ` : ''}
         `;
+        
+        // Update start route button based on route_started status
+        updateStartRouteButton(vehicleData.route_started);
         
         // Set initial connection status based on vehicle status
         const status = vehicleData.status ? vehicleData.status.toLowerCase() : 'unknown';
@@ -487,8 +625,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Show all routes details
-    showAllRouteDetailsBtn.addEventListener('click', () => {
-      mapHandler.showAllRoutes();
+    showAllRouteDetailsBtn.addEventListener('click', async () => {
+      console.log('Refreshing routes and location...');
+      
+      // Force refresh location data
+      try {
+        const locationData = await window.supabase.getVehicleLocation(config.vehicleId);
+        if (locationData) {
+          handleLocationUpdate(locationData, 'UPDATE');
+        }
+      } catch (error) {
+        console.error('Error refreshing location:', error);
+      }
+      
+      // Force refresh vehicle data
+      try {
+        const vehicleData = await window.supabase.getVehicleDetails(config.vehicleId);
+        if (vehicleData) {
+          handleVehicleUpdate(vehicleData, 'UPDATE');
+        }
+      } catch (error) {
+        console.error('Error refreshing vehicle data:', error);
+      }
+      
+      // Force refresh pickup points
+      try {
+        const newPickupPoints = await window.supabase.getOrganizationPickupPoints(
+          config.organizationId,
+          config.vehicleId
+        );
+        if (newPickupPoints) {
+          pickupPoints = newPickupPoints;
+          mapHandler.addPickupPoints(pickupPoints);
+          pickupPointsCountEl.textContent = `${pickupPoints.length} pickup points available`;
+        }
+      } catch (error) {
+        console.error('Error refreshing pickup points:', error);
+      }
+      
+      // Update routes smoothly
+      mapHandler.updateRoutesSmooth();
+      
+      showNotification('Routes and location refreshed', 'success');
     });
     
     // Refresh images
@@ -534,6 +712,122 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
     
+    // Start/Stop route toggle
+    startRouteBtn.addEventListener('click', async () => {
+      try {
+        // Check current button state to determine action
+        const isRouteActive = startRouteBtn.classList.contains('btn-success');
+        
+        // Disable the button during the operation
+        startRouteBtn.disabled = true;
+        
+        if (isRouteActive) {
+          // Stop the route
+          startRouteBtn.textContent = 'Stopping...';
+          showNotification('Stopping route...', 'info');
+          
+          const result = await window.supabase.stopRoute(config.vehicleId);
+          
+          if (result && result.success) {
+            showNotification('Route stopped successfully!', 'success');
+            // The updateStartRouteButton function will be called via real-time update
+          } else {
+            showNotification(result.error || 'Failed to stop route', 'error');
+            startRouteBtn.disabled = false;
+            startRouteBtn.textContent = 'Stop Route';
+          }
+        } else {
+          // Start the route
+          startRouteBtn.textContent = 'Starting...';
+          showNotification('Starting route...', 'info');
+          
+          const result = await window.supabase.startRoute(config.vehicleId);
+          
+          if (result && result.success) {
+            showNotification('Route started successfully!', 'success');
+            // The updateStartRouteButton function will be called via real-time update
+          } else {
+            showNotification(result.error || 'Failed to start route', 'error');
+            startRouteBtn.disabled = false;
+            startRouteBtn.textContent = 'Start Route';
+          }
+        }
+      } catch (error) {
+        console.error('Error toggling route:', error);
+        showNotification(`Error: ${error.message}`, 'error');
+        startRouteBtn.disabled = false;
+        
+        // Reset button text based on current state
+        const isRouteActive = startRouteBtn.classList.contains('btn-success');
+        startRouteBtn.textContent = isRouteActive ? 'Stop Route' : 'Start Route';
+      }
+    });
+    
+    // Emergency alert button
+    const emergencyBtn = document.getElementById('emergency-alert');
+    const emergencyModal = document.getElementById('emergency-modal');
+    const closeModal = document.querySelector('.close-modal');
+    const emergencyButtons = document.querySelectorAll('.emergency-btn');
+    
+    // Open emergency modal
+    emergencyBtn.addEventListener('click', () => {
+      emergencyModal.style.display = 'block';
+    });
+    
+    // Close emergency modal
+    closeModal.addEventListener('click', () => {
+      emergencyModal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside
+    emergencyModal.addEventListener('click', (e) => {
+      if (e.target === emergencyModal) {
+        emergencyModal.style.display = 'none';
+      }
+    });
+    
+    // Handle emergency button clicks
+    emergencyButtons.forEach(button => {
+      button.addEventListener('click', async () => {
+        const emergencyType = button.getAttribute('data-type');
+        
+        try {
+          // Disable all emergency buttons during the operation
+          emergencyButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.classList.add('loading');
+          });
+          
+          showNotification(`Sending ${emergencyType} alert...`, 'info');
+          
+          // Send emergency alert via Supabase
+          const result = await window.supabase.sendEmergencyAlert(
+            config.vehicleId,
+            config.organizationId,
+            emergencyType
+          );
+          
+          if (result && result.success) {
+            showNotification(`${emergencyType.charAt(0).toUpperCase() + emergencyType.slice(1)} alert sent successfully!`, 'success');
+            
+            // Close the modal after successful alert
+            emergencyModal.style.display = 'none';
+          } else {
+            showNotification(result.error || 'Failed to send emergency alert', 'error');
+          }
+        } catch (error) {
+          console.error('Error sending emergency alert:', error);
+          showNotification(`Error: ${error.message}`, 'error');
+        } finally {
+          // Re-enable all emergency buttons
+          emergencyButtons.forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+          });
+        }
+      });
+    });
+
     // Clean up subscriptions when the window is closed
     window.addEventListener('beforeunload', () => {
       cleanupSubscriptions();
@@ -704,6 +998,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         break;
       default:
         statusIconEl.classList.add('status-connecting');
+    }
+  }
+
+  // Update start route button based on route status
+  function updateStartRouteButton(routeStarted) {
+    if (!startRouteBtn) return;
+    
+    if (routeStarted) {
+      startRouteBtn.textContent = 'Stop Route';
+      startRouteBtn.classList.remove('btn-primary');
+      startRouteBtn.classList.add('btn-success');
+      startRouteBtn.disabled = false;
+      startRouteBtn.title = 'Click to stop the current route';
+    } else {
+      startRouteBtn.textContent = 'Start Route';
+      startRouteBtn.classList.remove('btn-success');
+      startRouteBtn.classList.add('btn-primary');
+      startRouteBtn.disabled = false;
+      startRouteBtn.title = 'Click to start a new route';
     }
   }
 

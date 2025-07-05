@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld(
     restartApp: () => ipcRenderer.invoke('restart-app'),
     getEnvVars: () => ipcRenderer.invoke('get-env-vars'),
     downloadImage: (imageData) => ipcRenderer.invoke('download-images', imageData),
-    runFaceVerification: () => ipcRenderer.invoke('run-face-verification')
+    runFaceVerification: () => ipcRenderer.invoke('run-face-verification'),
+    startRoute: (vehicleId) => ipcRenderer.invoke('start-route', vehicleId),
+    stopRoute: (vehicleId) => ipcRenderer.invoke('stop-route', vehicleId),
+    sendEmergencyAlert: (vehicleId, organizationId, emergencyType) => ipcRenderer.invoke('send-emergency-alert', vehicleId, organizationId, emergencyType)
   }
 ); 

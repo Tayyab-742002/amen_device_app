@@ -230,15 +230,8 @@ class MapHandler {
       });
     }
     
-    // Update routes if we have pickup points and vehicle position changed
-    if (this.pickupMarkers.length > 0) {
-      // Only update routes every few position changes to avoid too many API calls
-      if (!this.routesDisplayed || !this.lastRouteUpdateTime || 
-          (Date.now() - this.lastRouteUpdateTime > 10000)) { // Update routes at most every 10 seconds
-        this.showAllRoutes();
-        this.lastRouteUpdateTime = Date.now();
-      }
-    }
+    // Don't automatically update routes here - let the app handle it with debouncing
+    // This prevents constant route updates that cause blinking
   }
 
   // Add pickup points to the map
@@ -294,10 +287,8 @@ class MapHandler {
       });
     });
     
-    // If we have pickup points and a vehicle marker, show routes between all points
-    if (this.pickupMarkers.length > 0 && this.vehicleMarker) {
-      this.showAllRoutes();
-    }
+    // Don't automatically show routes here - let the app handle it with debouncing
+    // This prevents route updates every time pickup points are added/updated
   }
 
   // Clear pickup markers
@@ -311,6 +302,7 @@ class MapHandler {
   async showAllRoutes() {
     if (!this.map || !this.vehicleMarker || this.pickupMarkers.length === 0) return;
     this.routesDisplayed = true;
+    this.isUpdatingRoutes = false;
 
     try {
       // Start with the vehicle location
@@ -491,6 +483,102 @@ class MapHandler {
     }
   }
   
+  // Smooth route updates without blinking
+  async updateRoutesSmooth() {
+    if (!this.map || !this.vehicleMarker || this.pickupMarkers.length === 0) return;
+    if (this.isUpdatingRoutes) return; // Prevent concurrent updates
+    
+    this.isUpdatingRoutes = true;
+    
+    try {
+      console.log('Updating routes smoothly...');
+      
+      // Start with the vehicle location
+      const vehiclePosition = this.vehicleMarker.getLngLat();
+      
+      // Sort pickup points by distance from vehicle
+      const pickupPointsWithDistance = this.pickupMarkers.map((markerObj, index) => {
+        const distance = this.calculateDistance(
+          vehiclePosition.lat, vehiclePosition.lng,
+          markerObj.point.latitude, markerObj.point.longitude
+        );
+        
+        return {
+          index: index,
+          point: markerObj.point,
+          distance: distance
+        };
+      });
+      
+      // Sort by distance
+      pickupPointsWithDistance.sort((a, b) => a.distance - b.distance);
+      this.sortedPickupPoints = pickupPointsWithDistance;
+      
+      // Update routes one by one without clearing first
+      if (pickupPointsWithDistance.length >= 1) {
+        const closestPoint = pickupPointsWithDistance[0].point;
+        const closestRoute = await this.getRouteData(vehiclePosition, closestPoint);
+        
+        if (closestRoute) {
+          // Smoothly update the closest route
+          this.map.getSource('route-closest').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: closestRoute.geometry
+          });
+          this.closestRouteInfo = this.processRouteDetails(closestRoute);
+        }
+      }
+      
+      if (pickupPointsWithDistance.length >= 2) {
+        const secondClosestPoint = pickupPointsWithDistance[1].point;
+        const secondRoute = await this.getRouteData(vehiclePosition, secondClosestPoint);
+        
+        if (secondRoute) {
+          // Smoothly update the second closest route
+          this.map.getSource('route-second').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: secondRoute.geometry
+          });
+          this.secondRouteInfo = this.processRouteDetails(secondRoute);
+        }
+      }
+      
+      // Update remaining routes
+      const remainingPoints = pickupPointsWithDistance.slice(2, 7);
+      
+      for (let i = 0; i < remainingPoints.length; i++) {
+        const point = remainingPoints[i].point;
+        const routeData = await this.getRouteData(vehiclePosition, point);
+        
+        if (routeData) {
+          this.map.getSource(`route-other-${i}`).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: routeData.geometry
+          });
+        }
+      }
+      
+      // Clear any unused route sources
+      for (let i = remainingPoints.length; i < 5; i++) {
+        this.map.getSource(`route-other-${i}`).setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+      }
+      
+      console.log('Routes updated smoothly');
+      
+    } catch (error) {
+      console.error('Error updating routes smoothly:', error);
+    } finally {
+      this.isUpdatingRoutes = false;
+    }
+  }
+
   // Clear all routes from the map
   clearAllRoutes() {
     if (!this.map) return;

@@ -490,8 +490,14 @@ body, html {
 /* Compact Button Groups */
 .button-group {
   display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.button-group .btn {
+  flex: 1;
+  max-width: 150px;
 }
 
 /* Compact Organization Section */
@@ -1224,4 +1230,292 @@ body, html {
 .btn-accent:hover {
   background-color: var(--accent-color);
   filter: brightness(1.1);
+}
+
+/* Success button style */
+.btn-success {
+  background-color: var(--success-color);
+  color: var(--text-light);
+  border: 1px solid var(--success-color);
+}
+
+.btn-success:hover {
+  background-color: var(--success-color);
+  filter: brightness(1.1);
+}
+
+.btn-success:disabled {
+  background-color: var(--success-color);
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+/* Danger button style for stop actions */
+.btn-danger {
+  background-color: var(--danger-color);
+  color: var(--text-light);
+  border: 1px solid var(--danger-color);
+}
+
+.btn-danger:hover {
+  background-color: var(--danger-color);
+  filter: brightness(1.1);
+}
+
+/* Route button specific styles - only for stop route state */
+#start-route.btn-success:hover {
+  background-color: var(--danger-color);
+  border-color: var(--danger-color);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 0, 64, 0.3);
+}
+
+/* Primary button hover should stay blue/primary color */
+#start-route.btn-primary:hover {
+  background-color: var(--primary-color);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 255, 65, 0.3);
+}
+
+/* Add icons to route button states */
+#start-route.btn-primary::before {
+  content: "▶ ";
+  margin-right: 4px;
+}
+
+#start-route.btn-success::before {
+  content: "⏹ ";
+  margin-right: 4px;
+}
+
+/* Smooth transitions for button state changes */
+#start-route {
+  transition: all 0.3s ease;
+}
+
+/* Emergency Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background-color: var(--card-bg);
+  margin: 10% auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 500px;
+  box-shadow: var(--shadow);
+  animation: modal-slide-in 0.3s ease-out;
+}
+
+@keyframes modal-slide-in {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--dark-bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: var(--danger-color);
+  font-size: 1.5rem;
+}
+
+.close-modal {
+  color: var(--text-dim);
+  font-size: 2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.close-modal:hover {
+  color: var(--danger-color);
+}
+
+.modal-body {
+  padding: 2rem;
+}
+
+.modal-body p {
+  margin-bottom: 1.5rem;
+  color: var(--text-color);
+  text-align: center;
+}
+
+.emergency-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.emergency-btn {
+  padding: 1.5rem;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--light-bg);
+  color: var(--text-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  min-height: 100px;
+  text-align: center;
+}
+
+.emergency-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.emergency-btn:active {
+  transform: translateY(0);
+}
+
+/* Emergency button specific colors */
+.accident-btn {
+  border-color: #ff4444;
+}
+
+.accident-btn:hover {
+  background-color: #ff4444;
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
+}
+
+.breakdown-btn {
+  border-color: #ff8800;
+}
+
+.breakdown-btn:hover {
+  background-color: #ff8800;
+  box-shadow: 0 4px 12px rgba(255, 136, 0, 0.4);
+}
+
+.medical-btn {
+  border-color: #ff0066;
+}
+
+.medical-btn:hover {
+  background-color: #ff0066;
+  box-shadow: 0 4px 12px rgba(255, 0, 102, 0.4);
+}
+
+.security-btn {
+  border-color: #8800ff;
+}
+
+.security-btn:hover {
+  background-color: #8800ff;
+  box-shadow: 0 4px 12px rgba(136, 0, 255, 0.4);
+}
+
+.weather-btn {
+  border-color: #0088ff;
+}
+
+.weather-btn:hover {
+  background-color: #0088ff;
+  box-shadow: 0 4px 12px rgba(0, 136, 255, 0.4);
+}
+
+.route-change-btn {
+  border-color: #ffaa00;
+}
+
+.route-change-btn:hover {
+  background-color: #ffaa00;
+  box-shadow: 0 4px 12px rgba(255, 170, 0, 0.4);
+}
+
+/* Emergency button loading state */
+.emergency-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.emergency-btn.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.emergency-btn.loading::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+.emergency-btn.loading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 0;
+}
+
+.emergency-icon {
+  font-size: 2rem;
+  line-height: 1;
+  display: block;
+}
+
+.emergency-text {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  display: block;
+}
+
+/* Responsive design for emergency buttons */
+@media (max-width: 480px) {
+  .emergency-buttons {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-content {
+    margin: 5% auto;
+    width: 95%;
+  }
 }

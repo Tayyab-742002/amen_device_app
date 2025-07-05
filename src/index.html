@@ -75,6 +75,8 @@
         
         <div class="button-group">
           <button id="show-all-routes-details" class="btn btn-secondary">Refresh Routes</button>
+          <button id="start-route" class="btn btn-primary">Start Route</button>
+          <button id="emergency-alert" class="btn btn-danger">🚨 Emergency</button>
         </div>
       </div>
     </main>
@@ -93,6 +95,45 @@
         </div>
       </div>
     </aside>
+  </div>
+
+  <!-- Emergency Alert Modal -->
+  <div id="emergency-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🚨 Emergency Alert</h2>
+        <span class="close-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Select the type of emergency to send an alert to all users:</p>
+        <div class="emergency-buttons">
+          <button class="emergency-btn accident-btn" data-type="accident">
+            <span class="emergency-icon">🚗</span>
+            <span class="emergency-text">Accident</span>
+          </button>
+          <button class="emergency-btn breakdown-btn" data-type="breakdown">
+            <span class="emergency-icon">🔧</span>
+            <span class="emergency-text">Breakdown</span>
+          </button>
+          <button class="emergency-btn medical-btn" data-type="medical">
+            <span class="emergency-icon">🏥</span>
+            <span class="emergency-text">Medical</span>
+          </button>
+          <button class="emergency-btn security-btn" data-type="security">
+            <span class="emergency-icon">🔒</span>
+            <span class="emergency-text">Security</span>
+          </button>
+          <button class="emergency-btn weather-btn" data-type="weather">
+            <span class="emergency-icon">🌧️</span>
+            <span class="emergency-text">Weather</span>
+          </button>
+          <button class="emergency-btn route-change-btn" data-type="route_change">
+            <span class="emergency-icon">🛣️</span>
+            <span class="emergency-text">Route Change</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>

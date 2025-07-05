@@ -172,6 +172,39 @@ ipcMain.handle('download-images', async (event, imageData) => {
   }
 });
 
+// Handle starting route
+ipcMain.handle('start-route', async (event, vehicleId) => {
+  try {
+    console.log(`Starting route for vehicle ${vehicleId}`);
+    return { success: true, message: 'Route started successfully' };
+  } catch (error) {
+    console.error('Error starting route:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Handle stopping route
+ipcMain.handle('stop-route', async (event, vehicleId) => {
+  try {
+    console.log(`Stopping route for vehicle ${vehicleId}`);
+    return { success: true, message: 'Route stopped successfully' };
+  } catch (error) {
+    console.error('Error stopping route:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Handle sending emergency alert
+ipcMain.handle('send-emergency-alert', async (event, vehicleId, organizationId, emergencyType) => {
+  try {
+    console.log(`Sending emergency alert: ${emergencyType} for vehicle ${vehicleId} in organization ${organizationId}`);
+    return { success: true, message: `Emergency alert sent: ${emergencyType}` };
+  } catch (error) {
+    console.error('Error sending emergency alert:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Handle running the face verification script
 ipcMain.handle('run-face-verification', async (event) => {
   try {
