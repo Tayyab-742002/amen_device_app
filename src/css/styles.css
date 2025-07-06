@@ -543,9 +543,16 @@ body, html {
 .route-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0.4rem 0.6rem;
   background: var(--dark-bg);
   border-bottom: 1px solid var(--border-color);
+}
+
+.route-header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
 }
 
 .route-indicator {
@@ -561,6 +568,20 @@ body, html {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-light);
+}
+
+.update-time {
+  font-size: 0.7rem;
+  color: var(--terminal-green);
+  opacity: 0.8;
+  margin-left: 0.5rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
 }
 
 .route-body {

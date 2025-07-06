@@ -1,5 +1,12 @@
 // Main application functionality
+// Helper function to get mapHandler instance
+function getMapHandler() {
+  return typeof mapHandler !== 'undefined' ? mapHandler : window.mapHandler;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  // Small delay to ensure all scripts have loaded
+  await new Promise(resolve => setTimeout(resolve, 100));
   // Elements
   const organizationInfoEl = document.getElementById('organization-info');
   const vehicleInfoEl = document.getElementById('vehicle-info');
@@ -60,9 +67,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       console.log('Supabase connection test passed');
 
+      // Wait for mapHandler to be available
+      if (!getMapHandler()) {
+        console.log('Waiting for mapHandler to be available...');
+        await new Promise((resolve, reject) => {
+          let attempts = 0;
+          const checkMapHandler = () => {
+            attempts++;
+            if (getMapHandler()) {
+              console.log('mapHandler is now available');
+              resolve();
+            } else if (attempts >= 50) { // Wait up to 5 seconds (50 * 100ms)
+              reject(new Error('mapHandler not available after 5 seconds'));
+            } else {
+              setTimeout(checkMapHandler, 100);
+            }
+          };
+          checkMapHandler();
+        });
+      }
+
       // Initialize map
       const initialLocation = await window.supabase.getVehicleLocation(config.vehicleId);
-      await mapHandler.initializeMap(initialLocation);
+      await getMapHandler().initializeMap(initialLocation);
 
       // Load organization data
       loadOrganizationData();
@@ -84,8 +111,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Handle window resize
       window.addEventListener('resize', () => {
-        mapHandler.resizeMap();
+        const handler = getMapHandler();
+        if (handler) {
+          handler.resizeMap();
+        }
       });
+      
+      // Start real-time route updates
+      const handler = getMapHandler();
+      if (handler) {
+        handler.startRealTimeRouteUpdates();
+      }
     } catch (error) {
       console.error('Error initializing app:', error);
       setConnectionStatus('error', 'Error initializing application');
@@ -150,7 +186,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     speedEl.textContent = locationData.speed ? locationData.speed.toFixed(1) : '0.0';
     
     // Update vehicle marker on map
-    mapHandler.updateVehiclePosition(locationData.longitude, locationData.latitude);
+    if (typeof mapHandler !== 'undefined') {
+      mapHandler.updateVehiclePosition(locationData.longitude, locationData.latitude);
+    }
     
     // Only update routes if location has changed significantly (more than 10 meters)
     const currentLocation = { lat: locationData.latitude, lng: locationData.longitude };
@@ -158,7 +196,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Debounce route updates to prevent excessive API calls
       clearTimeout(window.routeUpdateTimeout);
       window.routeUpdateTimeout = setTimeout(() => {
-        mapHandler.updateRoutesSmooth();
+        if (typeof mapHandler !== 'undefined') {
+          mapHandler.updateRoutesSmooth();
+          // Trigger real-time route data calculation for accurate distance/duration
+          mapHandler.calculateRealTimeRouteData();
+        }
       }, 2000); // Wait 2 seconds before updating routes
     }
     
@@ -250,7 +292,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log(`Pickup point update: ${activePickupPoints.length} active out of ${pickupPoints.length} total pickup points`);
     
     // Update pickup points on the map (only show active ones)
-    mapHandler.addPickupPoints(activePickupPoints);
+    if (typeof mapHandler !== 'undefined') {
+      mapHandler.addPickupPoints(activePickupPoints);
+    }
     
     // Update pickup point count to show active vs total
     const totalCount = pickupPoints.length;
@@ -468,7 +512,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const activePickupPoints = pickupPoints.filter(point => point.is_active === true);
       
       // Add pickup points to map (only show active ones)
-      mapHandler.addPickupPoints(activePickupPoints);
+      if (typeof mapHandler !== 'undefined') {
+        mapHandler.addPickupPoints(activePickupPoints);
+      }
       
       // Update pickup point count to show active vs total
       const totalCount = pickupPoints.length;
@@ -485,12 +531,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Display initial route information
       try {
-        const initialRouteInfo = await mapHandler.showAllRoutes();
-        if (initialRouteInfo) {
-          routeInfo = initialRouteInfo;
-          displayRouteInfo();
+        if (typeof mapHandler !== 'undefined') {
+          const initialRouteInfo = await mapHandler.showAllRoutes();
+          if (initialRouteInfo) {
+            routeInfo = initialRouteInfo;
+            displayRouteInfo();
+            
+            // Trigger initial real-time route calculation for accurate data
+            setTimeout(() => {
+              if (typeof mapHandler !== 'undefined') {
+                mapHandler.calculateRealTimeRouteData();
+              }
+            }, 1000);
+          } else {
+            routeInfoEl.innerHTML = '<div class="error">Could not load route information</div>';
+          }
         } else {
-          routeInfoEl.innerHTML = '<div class="error">Could not load route information</div>';
+          routeInfoEl.innerHTML = '<div class="error">Map handler not available</div>';
         }
       } catch (routeError) {
         console.error('Error showing routes:', routeError);
@@ -561,11 +618,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // No click event handlers for images
   }
 
-  // Display route information
-  function displayRouteInfo() {
+  // Display route information (make it globally accessible)
+  window.displayRouteInfo = function displayRouteInfo() {
     if (!routeInfoEl) return;
     
     // Get all route details from map handler
+    if (typeof mapHandler === 'undefined') {
+      routeInfoEl.innerHTML = '<div class="error">Map handler not available</div>';
+      return;
+    }
+    
     const allRouteDetails = mapHandler.getAllRouteDetails();
     
     if (!allRouteDetails || !allRouteDetails.closest) {
@@ -580,88 +642,118 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let routesHtml = '';
     
-    // Add closest route info (green)
-    if (closestRoute) {
-      const closestPoint = sortedPickupPoints && sortedPickupPoints.length > 0 ? 
-        sortedPickupPoints[0].point : null;
+    // Add closest route info (green) with real-time data
+    if (sortedPickupPoints && sortedPickupPoints.length > 0) {
+      const closestData = sortedPickupPoints[0];
+      const closestPoint = closestData.point;
       
-      routesHtml += `
-        <div class="route-card closest-route">
-          <div class="route-header">
-            <span class="route-indicator" style="background-color: #2ecc71;"></span>
-            <h3>Closest Route</h3>
-          </div>
-          <div class="route-body">
-            <div class="route-info-item">
-              <span class="info-label">Distance:</span> 
-              <span class="info-value">${(closestRoute.distance / 1000).toFixed(2)} km</span>
+      // Use real-time data if available, otherwise fall back to basic route data
+      const distance = closestData.realTimeDistance || (closestRoute ? closestRoute.distance : null);
+      const duration = closestData.realTimeDuration || (closestRoute ? closestRoute.duration : null);
+      const lastUpdated = closestData.lastUpdated;
+      
+      if (distance && duration) {
+        routesHtml += `
+          <div class="route-card closest-route">
+            <div class="route-header">
+              <div class="route-header-left">
+                <span class="route-indicator" style="background-color: #2ecc71;"></span>
+                <h3>Closest Route</h3>
+              </div>
+              ${lastUpdated ? `<span class="update-time" title="Last updated: ${new Date(lastUpdated).toLocaleTimeString()}">🔄</span>` : ''}
             </div>
-            <div class="route-info-item">
-              <span class="info-label">Duration:</span> 
-              <span class="info-value">${Math.floor(closestRoute.duration / 60)} minutes</span>
+            <div class="route-body">
+              <div class="route-info-item">
+                <span class="info-label">Distance:</span> 
+                <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDistance(distance) : `${(distance / 1000).toFixed(2)} km`}</span>
+              </div>
+              <div class="route-info-item">
+                <span class="info-label">Duration:</span> 
+                <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDuration(duration) : `${Math.floor(duration / 60)} minutes`}</span>
+              </div>
+              ${closestRoute && closestRoute.averageSpeed ? `
+              <div class="route-info-item">
+                <span class="info-label">Avg Speed:</span> 
+                <span class="info-value">${Math.round(closestRoute.averageSpeed)} km/h</span>
+              </div>` : ''}
+              ${closestRoute && closestRoute.maxspeedInfo ? `
+              <div class="route-info-item">
+                <span class="info-label">Speed Limit:</span> 
+                <span class="info-value">${closestRoute.maxspeedInfo.highest} ${closestRoute.maxspeedInfo.units}</span>
+              </div>` : ''}
+              ${closestPoint && closestPoint.name ? `
+              <div class="route-info-item">
+                <span class="info-label">Destination:</span> 
+                <span class="info-value">${closestPoint.name}</span>
+              </div>` : ''}
+              ${lastUpdated ? `
+              <div class="route-info-item">
+                <span class="info-label">Updated:</span> 
+                <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
+              </div>` : ''}
             </div>
-            ${closestRoute.averageSpeed ? `
-            <div class="route-info-item">
-              <span class="info-label">Avg Speed:</span> 
-              <span class="info-value">${Math.round(closestRoute.averageSpeed)} km/h</span>
-            </div>` : ''}
-            ${closestRoute.maxspeedInfo ? `
-            <div class="route-info-item">
-              <span class="info-label">Speed Limit:</span> 
-              <span class="info-value">${closestRoute.maxspeedInfo.highest} ${closestRoute.maxspeedInfo.units}</span>
-            </div>` : ''}
-            ${closestPoint && closestPoint.name ? `
-            <div class="route-info-item">
-              <span class="info-label">Destination:</span> 
-              <span class="info-value">${closestPoint.name}</span>
+            ${closestPoint && (closestPoint.user_name || closestPoint.user_email || closestPoint.user_phone) ? `
+            <div class="route-user-info">
+              <h4>Pickup Point Owner</h4>
+              ${closestPoint.user_name ? `<p><strong>Name:</strong> ${closestPoint.user_name}</p>` : ''}
+              ${closestPoint.user_email ? `<p><strong>Email:</strong> ${closestPoint.user_email}</p>` : ''}
+              ${closestPoint.user_phone ? `<p><strong>Phone:</strong> ${closestPoint.user_phone}</p>` : ''}
             </div>` : ''}
           </div>
-          ${closestPoint && (closestPoint.user_name || closestPoint.user_email || closestPoint.user_phone) ? `
-          <div class="route-user-info">
-            <h4>Pickup Point Owner</h4>
-            ${closestPoint.user_name ? `<p><strong>Name:</strong> ${closestPoint.user_name}</p>` : ''}
-            ${closestPoint.user_email ? `<p><strong>Email:</strong> ${closestPoint.user_email}</p>` : ''}
-            ${closestPoint.user_phone ? `<p><strong>Phone:</strong> ${closestPoint.user_phone}</p>` : ''}
-          </div>` : ''}
-        </div>
-      `;
+        `;
+      }
     }
     
-    // Add second closest route info (yellow)
-    if (secondRoute) {
-      const secondPoint = sortedPickupPoints && sortedPickupPoints.length > 1 ? 
-        sortedPickupPoints[1].point : null;
+    // Add second closest route info (yellow) with real-time data
+    if (sortedPickupPoints && sortedPickupPoints.length > 1) {
+      const secondData = sortedPickupPoints[1];
+      const secondPoint = secondData.point;
       
-      routesHtml += `
-        <div class="route-card second-route">
-          <div class="route-header">
-            <span class="route-indicator" style="background-color: #f1c40f;"></span>
-            <h3>Second Closest Route</h3>
-          </div>
-          <div class="route-body">
-            <div class="route-info-item">
-              <span class="info-label">Distance:</span> 
-              <span class="info-value">${(secondRoute.distance / 1000).toFixed(2)} km</span>
+      // Use real-time data if available, otherwise fall back to basic route data
+      const distance = secondData.realTimeDistance || (secondRoute ? secondRoute.distance : null);
+      const duration = secondData.realTimeDuration || (secondRoute ? secondRoute.duration : null);
+      const lastUpdated = secondData.lastUpdated;
+      
+      if (distance && duration) {
+        routesHtml += `
+          <div class="route-card second-route">
+            <div class="route-header">
+              <div class="route-header-left">
+                <span class="route-indicator" style="background-color: #f1c40f;"></span>
+                <h3>Second Closest Route</h3>
+              </div>
+              ${lastUpdated ? `<span class="update-time" title="Last updated: ${new Date(lastUpdated).toLocaleTimeString()}">🔄</span>` : ''}
             </div>
-            <div class="route-info-item">
-              <span class="info-label">Duration:</span> 
-              <span class="info-value">${Math.floor(secondRoute.duration / 60)} minutes</span>
+            <div class="route-body">
+              <div class="route-info-item">
+                <span class="info-label">Distance:</span> 
+                <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDistance(distance) : `${(distance / 1000).toFixed(2)} km`}</span>
+              </div>
+              <div class="route-info-item">
+                <span class="info-label">Duration:</span> 
+                <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDuration(duration) : `${Math.floor(duration / 60)} minutes`}</span>
+              </div>
+              ${secondPoint && secondPoint.name ? `
+              <div class="route-info-item">
+                <span class="info-label">Destination:</span> 
+                <span class="info-value">${secondPoint.name}</span>
+              </div>` : ''}
+              ${lastUpdated ? `
+              <div class="route-info-item">
+                <span class="info-label">Updated:</span> 
+                <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
+              </div>` : ''}
             </div>
-            ${secondPoint && secondPoint.name ? `
-            <div class="route-info-item">
-              <span class="info-label">Destination:</span> 
-              <span class="info-value">${secondPoint.name}</span>
+            ${secondPoint && (secondPoint.user_name || secondPoint.user_email || secondPoint.user_phone) ? `
+            <div class="route-user-info">
+              <h4>Pickup Point Owner</h4>
+              ${secondPoint.user_name ? `<p><strong>Name:</strong> ${secondPoint.user_name}</p>` : ''}
+              ${secondPoint.user_email ? `<p><strong>Email:</strong> ${secondPoint.user_email}</p>` : ''}
+              ${secondPoint.user_phone ? `<p><strong>Phone:</strong> ${secondPoint.user_phone}</p>` : ''}
             </div>` : ''}
           </div>
-          ${secondPoint && (secondPoint.user_name || secondPoint.user_email || secondPoint.user_phone) ? `
-          <div class="route-user-info">
-            <h4>Pickup Point Owner</h4>
-            ${secondPoint.user_name ? `<p><strong>Name:</strong> ${secondPoint.user_name}</p>` : ''}
-            ${secondPoint.user_email ? `<p><strong>Email:</strong> ${secondPoint.user_email}</p>` : ''}
-            ${secondPoint.user_phone ? `<p><strong>Phone:</strong> ${secondPoint.user_phone}</p>` : ''}
-          </div>` : ''}
-        </div>
-      `;
+        `;
+      }
     }
     
     // Display other pickup points count
@@ -725,7 +817,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           const activePickupPoints = pickupPoints.filter(point => point.is_active === true);
           
           // Add pickup points to map (only show active ones)
-          mapHandler.addPickupPoints(activePickupPoints);
+          if (typeof mapHandler !== 'undefined') {
+            mapHandler.addPickupPoints(activePickupPoints);
+          }
           
           // Update pickup point count to show active vs total
           const totalCount = pickupPoints.length;
@@ -743,7 +837,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       
       // Update routes smoothly
-      mapHandler.updateRoutesSmooth();
+      if (typeof mapHandler !== 'undefined') {
+        mapHandler.updateRoutesSmooth();
+      }
       
       showNotification('Routes and location refreshed', 'success');
     });
@@ -1191,4 +1287,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize the application
   initApp();
+
+  // Add debugging functions for notification system
+  window.getNotificationStatus = function() {
+    const handler = getMapHandler();
+    return handler ? handler.getNotificationStatus() : null;
+  };
+  
+  window.resetNotifications = function() {
+    const handler = getMapHandler();
+    if (handler) {
+      handler.resetNotificationTracking();
+      return 'Notifications reset successfully';
+    }
+    return 'MapHandler not available';
+  };
+  
+  window.testNotification = function(userId = "95f12840-555e-456c-a8ba-ae00a05333fb") {
+    const handler = getMapHandler();
+    if (handler) {
+      // Create a test pickup point
+      const testPickupPoint = {
+        id: 'test-pickup',
+        name: 'Test Pickup Point',
+        user_id: userId,
+        device_id: 10,
+        organization_id: 1,
+        latitude: 0,
+        longitude: 0
+      };
+      
+      // Send test notification
+      handler.sendPickupNotification(userId, testPickupPoint, 4.5);
+      return 'Test notification sent';
+    }
+    return 'MapHandler not available';
+  };
 });

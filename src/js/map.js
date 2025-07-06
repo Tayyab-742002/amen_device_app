@@ -12,8 +12,33 @@ class MapHandler {
     this.lastRouteUpdateTime = null;
     this.closestRouteInfo = null;
     this.secondRouteInfo = null;
-    this.sortedPickupPoints = null;
+    this.sortedPickupPoints = [];
     this.userHasInteracted = false; // Track if user has manually moved the map
+    this.isUpdatingRoutes = false;
+    
+    // Real-time distance and duration tracking
+    this.realTimeRouteData = new Map(); // Store real-time route data for each pickup point
+    this.lastVehiclePosition = null;
+    this.routeUpdateInterval = null;
+    this.isCalculatingRoutes = false;
+    
+    // Real-time update configuration
+    this.ROUTE_UPDATE_INTERVAL = 15000; // Update every 15 seconds
+    this.SIGNIFICANT_MOVEMENT_THRESHOLD = 0.005; // 5 meters in km
+    this.MAX_CONCURRENT_ROUTE_CALLS = 3; // Limit concurrent API calls
+    
+    // Notification system configuration
+    this.NOTIFICATION_DISTANCE_MIN = 4; // 4km minimum distance for notification
+    this.NOTIFICATION_DISTANCE_MAX = 5; // 5km maximum distance for notification
+    this.notifiedUsers = new Set(); // Track users who have been notified to avoid duplicate notifications
+    
+    // Bind methods
+    this.handleMapInteraction = this.handleMapInteraction.bind(this);
+  }
+
+  // Handle map interaction events
+  handleMapInteraction() {
+    this.userHasInteracted = true;
   }
 
   // Initialize the map
@@ -43,13 +68,8 @@ class MapHandler {
         this.map.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
 
         // Track when user manually interacts with the map
-        this.map.on('dragstart', () => {
-          this.userHasInteracted = true;
-        });
-        
-        this.map.on('zoomstart', () => {
-          this.userHasInteracted = true;
-        });
+        this.map.on('dragstart', this.handleMapInteraction);
+        this.map.on('zoomstart', this.handleMapInteraction);
 
         // Create vehicle marker element with image
         const vehicleElement = document.createElement('div');
@@ -230,8 +250,11 @@ class MapHandler {
       });
     }
     
-    // Don't automatically update routes here - let the app handle it with debouncing
-    // This prevents constant route updates that cause blinking
+    // Trigger real-time route updates when vehicle moves
+    // This will check if vehicle has moved significantly and update routes accordingly
+    if (this.pickupMarkers.length > 0) {
+      this.calculateRealTimeRouteData();
+    }
   }
 
   // Add pickup points to the map
@@ -248,8 +271,12 @@ class MapHandler {
       this.closestRouteInfo = null;
       this.secondRouteInfo = null;
       this.sortedPickupPoints = [];
+      this.resetNotificationTracking(); // Reset notifications when no pickup points
       return;
     }
+    
+    // Reset notification tracking when pickup points change significantly
+    this.resetNotificationTracking();
     
     // Add new markers
     pickupPoints.forEach(point => {
@@ -356,7 +383,7 @@ class MapHandler {
       
       const response = await fetch(
         `https://api.mapbox.com/directions/v5/mapbox/driving/${waypointsStr}` +
-        `?alternatives=true&annotations=distance,duration,speed,congestion,congestion_numeric,maxspeed,closure` +
+        `?alternatives=false&annotations=distance,duration,speed,congestion,congestion_numeric,maxspeed,closure` +
         `&geometries=geojson&language=en&overview=full&steps=true` +
         `&access_token=${mapboxgl.accessToken}`
       );
@@ -983,14 +1010,18 @@ class MapHandler {
       }
     }
     
-    // Waypoint information
-    routeInfo.waypoints = this.routeDetails.waypoints.map(waypoint => ({
-      name: waypoint.name,
-      location: waypoint.location
-    }));
+    // Waypoint information if available
+    if (this.routeDetails && this.routeDetails.waypoints) {
+      routeInfo.waypoints = this.routeDetails.waypoints.map(waypoint => ({
+        name: waypoint.name,
+        location: waypoint.location
+      }));
+    }
     
-    // Add alternative routes count
-    routeInfo.alternativeRoutesCount = this.routeDetails.routes.length - 1;
+    // Add alternative routes count if available
+    if (this.routeDetails && this.routeDetails.routes) {
+      routeInfo.alternativeRoutesCount = this.routeDetails.routes.length - 1;
+    }
     
     // Original route data if needed for reference
     routeInfo.rawData = route;
@@ -1012,7 +1043,489 @@ class MapHandler {
       return null;
     }
   }
+
+  // Real-time distance and duration calculation methods
+  
+  // Start real-time route updates
+  startRealTimeRouteUpdates() {
+    if (this.routeUpdateInterval) {
+      clearInterval(this.routeUpdateInterval);
+    }
+    
+    console.log('Starting real-time route updates...');
+    
+    // Initial calculation
+    this.calculateRealTimeRouteData();
+    
+    // Set up interval for continuous updates
+    this.routeUpdateInterval = setInterval(() => {
+      this.calculateRealTimeRouteData();
+    }, this.ROUTE_UPDATE_INTERVAL);
+  }
+  
+  // Stop real-time route updates
+  stopRealTimeRouteUpdates() {
+    if (this.routeUpdateInterval) {
+      clearInterval(this.routeUpdateInterval);
+      this.routeUpdateInterval = null;
+      console.log('Stopped real-time route updates');
+    }
+    
+    // Clear notification tracking when stopping updates
+    this.resetNotificationTracking();
+  }
+
+  // Reset notification tracking (useful when route changes or restarts)
+  resetNotificationTracking() {
+    this.notifiedUsers.clear();
+    console.log('Notification tracking reset');
+  }
+
+  // Get notification status for debugging
+  getNotificationStatus() {
+    const status = {
+      notifiedUsers: Array.from(this.notifiedUsers),
+      notificationRange: `${this.NOTIFICATION_DISTANCE_MIN}km - ${this.NOTIFICATION_DISTANCE_MAX}km`,
+      activePickupPoints: this.pickupMarkers.filter(m => m.point.is_active).length,
+      totalPickupPoints: this.pickupMarkers.length
+    };
+    
+    console.log('Notification System Status:', status);
+    return status;
+  }
+  
+    // Calculate real-time route data for all active pickup points
+  async calculateRealTimeRouteData() {
+    if (!this.map || !this.vehicleMarker || this.isCalculatingRoutes) {
+      return;
+    }
+
+    const vehiclePosition = this.vehicleMarker.getLngLat();
+
+    // Check if vehicle has moved significantly
+    if (this.lastVehiclePosition && !this.hasVehicleMovedSignificantly(vehiclePosition)) {
+      return;
+    }
+
+    this.isCalculatingRoutes = true;
+    this.lastVehiclePosition = vehiclePosition;
+
+    try {
+      // Get active pickup points
+      const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+        markerObj.point.is_active === true
+      );
+
+      if (activePickupMarkers.length === 0) {
+        this.realTimeRouteData.clear();
+        this.clearAllRoutes();
+        this.isCalculatingRoutes = false;
+        return;
+      }
+
+      console.log(`Calculating real-time route data for ${activePickupMarkers.length} pickup points`);
+
+      // Process pickup points in batches to avoid overwhelming the API
+      const batchSize = this.MAX_CONCURRENT_ROUTE_CALLS;
+      for (let i = 0; i < activePickupMarkers.length; i += batchSize) {
+        const batch = activePickupMarkers.slice(i, i + batchSize);
+
+        // Calculate routes for this batch concurrently
+        const routePromises = batch.map(async (markerObj) => {
+          const pickupPoint = markerObj.point;
+          const routeData = await this.getAccurateRouteData(vehiclePosition, pickupPoint);
+
+          if (routeData) {
+            this.realTimeRouteData.set(pickupPoint.id, {
+              pickupPoint,
+              distance: routeData.distance,
+              duration: routeData.duration,
+              lastUpdated: Date.now(),
+              routeGeometry: routeData.geometry,
+              annotations: routeData.annotations || {}
+            });
+          }
+
+          return { pickupPoint, routeData };
+        });
+
+        await Promise.all(routePromises);
+
+        // Small delay between batches to be respectful to the API
+        if (i + batchSize < activePickupMarkers.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // Update the sorted pickup points with real-time data
+      this.updateSortedPickupPointsWithRealTimeData();
+
+      // **CRITICAL FIX**: Update the visual route paths on the map
+      await this.updateVisualRoutePathsFromRealTimeData();
+
+      // Check for pickup notification triggers (4km-5km distance)
+      await this.checkPickupNotifications();
+
+      // Trigger UI update
+      if (window.displayRouteInfo) {
+        window.displayRouteInfo();
+      }
+
+      console.log('Real-time route data calculation and visual update completed');
+
+    } catch (error) {
+      console.error('Error calculating real-time route data:', error);
+    } finally {
+      this.isCalculatingRoutes = false;
+    }
+  }
+  
+  // Get accurate route data using Mapbox Directions API
+  async getAccurateRouteData(vehiclePosition, pickupPoint) {
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/` +
+        `${vehiclePosition.lng},${vehiclePosition.lat};${pickupPoint.longitude},${pickupPoint.latitude}` +
+        `?alternatives=false&annotations=distance,duration,speed,congestion,congestion_numeric,maxspeed,closure` +
+        `&geometries=geojson&language=en&overview=full&steps=true` +
+        `&access_token=${mapboxgl.accessToken}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+        return null;
+      }
+      
+      const route = data.routes[0];
+      return {
+        distance: route.distance,
+        duration: route.duration,
+        geometry: route.geometry,
+        annotations: route.legs[0]?.annotation || {}
+      };
+      
+    } catch (error) {
+      console.error('Error getting accurate route data:', error);
+      return null;
+    }
+  }
+  
+  // Check if vehicle has moved significantly
+  hasVehicleMovedSignificantly(currentPosition) {
+    if (!this.lastVehiclePosition) return true;
+    
+    const distance = this.calculateDistance(
+      this.lastVehiclePosition.lat,
+      this.lastVehiclePosition.lng,
+      currentPosition.lat,
+      currentPosition.lng
+    );
+    
+    return distance > this.SIGNIFICANT_MOVEMENT_THRESHOLD;
+  }
+  
+    // Update sorted pickup points with real-time data
+  updateSortedPickupPointsWithRealTimeData() {
+    if (!this.vehicleMarker) return;
+
+    const vehiclePosition = this.vehicleMarker.getLngLat();
+    const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+      markerObj.point.is_active === true
+    );
+
+    // Create sorted list with real-time data
+    const pickupPointsWithRealTimeData = activePickupMarkers.map((markerObj) => {
+      const pickupPoint = markerObj.point;
+      const realTimeData = this.realTimeRouteData.get(pickupPoint.id);
+
+      if (realTimeData) {
+        return {
+          index: markerObj.index,
+          point: pickupPoint,
+          distance: realTimeData.distance / 1000, // Convert to km for sorting
+          realTimeDistance: realTimeData.distance,
+          realTimeDuration: realTimeData.duration,
+          lastUpdated: realTimeData.lastUpdated
+        };
+      } else {
+        // Fallback to straight-line distance
+        const straightLineDistance = this.calculateDistance(
+          vehiclePosition.lat, vehiclePosition.lng,
+          pickupPoint.latitude, pickupPoint.longitude
+        );
+
+        return {
+          index: markerObj.index,
+          point: pickupPoint,
+          distance: straightLineDistance,
+          realTimeDistance: null,
+          realTimeDuration: null,
+          lastUpdated: null
+        };
+      }
+    });
+
+    // Sort by real-time distance (or straight-line distance as fallback)
+    pickupPointsWithRealTimeData.sort((a, b) => {
+      const distanceA = a.realTimeDistance ? (a.realTimeDistance / 1000) : a.distance;
+      const distanceB = b.realTimeDistance ? (b.realTimeDistance / 1000) : b.distance;
+      return distanceA - distanceB;
+    });
+
+    this.sortedPickupPoints = pickupPointsWithRealTimeData;
+
+    // Update closest and second closest route info with real-time data
+  }
+
+  // Update visual route paths on the map using real-time data
+  async updateVisualRoutePathsFromRealTimeData() {
+    if (!this.map || !this.vehicleMarker || this.sortedPickupPoints.length === 0) {
+      return;
+    }
+
+    try {
+      console.log('Updating visual route paths from real-time data...');
+
+      // Update closest route (green)
+      if (this.sortedPickupPoints.length >= 1) {
+        const closestPoint = this.sortedPickupPoints[0];
+        const realTimeData = this.realTimeRouteData.get(closestPoint.point.id);
+
+        if (realTimeData && realTimeData.routeGeometry) {
+          this.map.getSource('route-closest').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: realTimeData.routeGeometry
+          });
+
+          // Update closest route info
+          this.closestRouteInfo = {
+            distance: realTimeData.distance,
+            duration: realTimeData.duration,
+            lastUpdated: realTimeData.lastUpdated
+          };
+        }
+      } else {
+        // Clear closest route if no points
+        this.map.getSource('route-closest').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+        this.closestRouteInfo = null;
+      }
+
+      // Update second closest route (yellow)
+      if (this.sortedPickupPoints.length >= 2) {
+        const secondClosestPoint = this.sortedPickupPoints[1];
+        const realTimeData = this.realTimeRouteData.get(secondClosestPoint.point.id);
+
+        if (realTimeData && realTimeData.routeGeometry) {
+          this.map.getSource('route-second').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: realTimeData.routeGeometry
+          });
+
+          // Update second closest route info
+          this.secondRouteInfo = {
+            distance: realTimeData.distance,
+            duration: realTimeData.duration,
+            lastUpdated: realTimeData.lastUpdated
+          };
+        }
+      } else {
+        // Clear second route if less than 2 points
+        this.map.getSource('route-second').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+        this.secondRouteInfo = null;
+      }
+
+      // Update remaining routes (gray)
+      const remainingPoints = this.sortedPickupPoints.slice(2, 7); // Limit to 5 more routes
+
+      for (let i = 0; i < remainingPoints.length; i++) {
+        const point = remainingPoints[i];
+        const realTimeData = this.realTimeRouteData.get(point.point.id);
+
+        if (realTimeData && realTimeData.routeGeometry) {
+          this.map.getSource(`route-other-${i}`).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: realTimeData.routeGeometry
+          });
+        }
+      }
+
+      // Clear any unused route sources
+      for (let i = remainingPoints.length; i < 5; i++) {
+        this.map.getSource(`route-other-${i}`).setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+      }
+
+      console.log('Visual route paths updated successfully');
+
+    } catch (error) {
+      console.error('Error updating visual route paths:', error);
+    }
+  }
+  
+  // Get real-time route data for a specific pickup point
+  getRealTimeRouteData(pickupPointId) {
+    return this.realTimeRouteData.get(pickupPointId);
+  }
+  
+  // Get all real-time route data
+  getAllRealTimeRouteData() {
+    return Array.from(this.realTimeRouteData.values());
+  }
+  
+  // Format distance for display
+  formatDistance(distanceInMeters) {
+    if (distanceInMeters < 1000) {
+      return `${Math.round(distanceInMeters)} m`;
+    } else {
+      return `${(distanceInMeters / 1000).toFixed(2)} km`;
+    }
+  }
+  
+  // Check for pickup notifications (4km-5km distance range)
+  async checkPickupNotifications() {
+    if (!this.vehicleMarker || this.pickupMarkers.length === 0) {
+      return;
+    }
+
+    try {
+      const vehiclePosition = this.vehicleMarker.getLngLat();
+      const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+        markerObj.point.is_active === true
+      );
+
+      console.log(`Checking pickup notifications for ${activePickupMarkers.length} active pickup points`);
+
+      for (const markerObj of activePickupMarkers) {
+        const pickupPoint = markerObj.point;
+        const realTimeData = this.realTimeRouteData.get(pickupPoint.id);
+
+        if (realTimeData && realTimeData.distance) {
+          const distanceInKm = realTimeData.distance / 1000; // Convert meters to kilometers
+          const userId = pickupPoint.user_id;
+
+          // Check if distance is within notification range (4km-5km)
+          if (distanceInKm >= this.NOTIFICATION_DISTANCE_MIN && 
+              distanceInKm <= this.NOTIFICATION_DISTANCE_MAX) {
+            
+            // Create a unique key for this user and distance range to avoid duplicate notifications
+            const notificationKey = `${userId}_${Math.floor(distanceInKm)}km`;
+            
+            if (!this.notifiedUsers.has(notificationKey) && userId) {
+              console.log(`Sending pickup notification for user ${userId} at distance ${distanceInKm.toFixed(2)}km`);
+              
+              // Send notification
+              const notificationSent = await this.sendPickupNotification(userId, pickupPoint, distanceInKm);
+              
+              if (notificationSent) {
+                this.notifiedUsers.add(notificationKey);
+                console.log(`Notification sent successfully for user ${userId}`);
+              }
+            }
+          } else if (distanceInKm > this.NOTIFICATION_DISTANCE_MAX) {
+            // If distance is greater than 5km, remove user from notified set
+            // This allows re-notification if vehicle moves away and comes back
+            const notificationKey = `${userId}_${Math.floor(distanceInKm)}km`;
+            if (this.notifiedUsers.has(notificationKey)) {
+              this.notifiedUsers.delete(notificationKey);
+            }
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Error checking pickup notifications:', error);
+    }
+  }
+
+  // Send pickup notification via Supabase function
+  async sendPickupNotification(userId, pickupPoint, distanceInKm) {
+    try {
+      // Get vehicle and organization IDs from config or pickup point data
+      const vehicleId = pickupPoint.device_id || window.config?.vehicleId || 10;
+      const organizationId = pickupPoint.organization_id || window.config?.organizationId || 1;
+
+      const notificationData = {
+        vehicleId: vehicleId,
+        organizationId: organizationId,
+        userId: userId,
+        distanceKm: Math.round(distanceInKm * 100) / 100, // Round to 2 decimal places
+        pickupPointId: pickupPoint.id,
+        pickupPointName: pickupPoint.name || 'Pickup Point',
+        estimatedArrival: this.calculateEstimatedArrival(pickupPoint.id)
+      };
+
+      console.log('Sending pickup notification:', notificationData);
+
+      const response = await fetch('https://knmhbgyxtpecuftjuheq.supabase.co/functions/v1/pickup-notification', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer amen',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(notificationData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Pickup notification response:', result);
+        return true;
+      } else {
+        console.error('Failed to send pickup notification:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Error details:', errorText);
+        return false;
+      }
+
+    } catch (error) {
+      console.error('Error sending pickup notification:', error);
+      return false;
+    }
+  }
+
+  // Calculate estimated arrival time for a pickup point
+  calculateEstimatedArrival(pickupPointId) {
+    const realTimeData = this.realTimeRouteData.get(pickupPointId);
+    if (realTimeData && realTimeData.duration) {
+      const now = new Date();
+      const arrivalTime = new Date(now.getTime() + (realTimeData.duration * 1000));
+      return arrivalTime.toISOString();
+    }
+    return null;
+  }
+
+  // Format duration for display
+  formatDuration(durationInSeconds) {
+    const hours = Math.floor(durationInSeconds / 3600);
+    const minutes = Math.floor((durationInSeconds % 3600) / 60);
+    const seconds = Math.floor(durationInSeconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  }
 }
 
 // Create map handler instance
-const mapHandler = new MapHandler(); 
+const mapHandler = new MapHandler();
+
+// Make mapHandler globally available
+window.mapHandler = mapHandler;
