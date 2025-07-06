@@ -239,6 +239,18 @@ class MapHandler {
     // Clear existing markers
     this.clearPickupMarkers();
     
+    console.log(`Adding ${pickupPoints.length} pickup points to map`);
+    
+    // If no pickup points provided, clear all routes and return
+    if (pickupPoints.length === 0) {
+      console.log('No pickup points provided, clearing all routes');
+      this.clearAllRoutes();
+      this.closestRouteInfo = null;
+      this.secondRouteInfo = null;
+      this.sortedPickupPoints = [];
+      return;
+    }
+    
     // Add new markers
     pickupPoints.forEach(point => {
       // Skip if missing required coordinates
@@ -287,6 +299,8 @@ class MapHandler {
       });
     });
     
+    console.log(`Successfully added ${this.pickupMarkers.length} pickup markers to map`);
+    
     // Don't automatically show routes here - let the app handle it with debouncing
     // This prevents route updates every time pickup points are added/updated
   }
@@ -308,13 +322,27 @@ class MapHandler {
       // Start with the vehicle location
       const vehiclePosition = this.vehicleMarker.getLngLat();
       
+      // Filter out inactive pickup points before route calculation
+      const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+        markerObj.point.is_active === true
+      );
+      
+      console.log(`Route calculation: ${activePickupMarkers.length} active out of ${this.pickupMarkers.length} total pickup points`);
+      
+      if (activePickupMarkers.length === 0) {
+        // No active pickup points, clear all routes
+        console.log('No active pickup points, clearing all routes');
+        this.clearAllRoutes();
+        return null;
+      }
+      
       // Create an array of coordinates starting with the vehicle position
       const waypoints = [
         `${vehiclePosition.lng},${vehiclePosition.lat}`
       ];
       
-      // Add all pickup points as waypoints
-      this.pickupMarkers.forEach(markerObj => {
+      // Add only active pickup points as waypoints
+      activePickupMarkers.forEach(markerObj => {
         const point = markerObj.point;
         waypoints.push(`${point.longitude},${point.latitude}`);
       });
@@ -342,8 +370,8 @@ class MapHandler {
       // Save all route details
       this.routeDetails = data;
       
-      // Sort pickup points by distance from vehicle
-      const pickupPointsWithDistance = this.pickupMarkers.map((markerObj, index) => {
+      // Sort active pickup points by distance from vehicle
+      const pickupPointsWithDistance = activePickupMarkers.map((markerObj, index) => {
         // Calculate distance from vehicle to pickup point
         const distance = this.calculateDistance(
           vehiclePosition.lat, vehiclePosition.lng,
@@ -363,10 +391,7 @@ class MapHandler {
       // Store the sorted pickup points for route details display
       this.sortedPickupPoints = pickupPointsWithDistance;
       
-      // Clear all routes first
-      this.clearAllRoutes();
-      
-      // Display routes with color coding
+      // Display routes with color coding (don't clear all routes first)
       if (pickupPointsWithDistance.length >= 1) {
         // Get the closest pickup point
         const closestPoint = pickupPointsWithDistance[0].point;
@@ -419,6 +444,40 @@ class MapHandler {
             type: 'Feature',
             properties: {},
             geometry: routeData.geometry
+          });
+        }
+      }
+      
+      // Clear any unused route sources (in case we have fewer active points now)
+      for (let i = remainingPoints.length; i < 5; i++) {
+        if (this.map.getSource(`route-other-${i}`)) {
+          this.map.getSource(`route-other-${i}`).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: [] }
+          });
+        }
+      }
+      
+      // Clear routes that won't be used based on number of active points
+      if (pickupPointsWithDistance.length < 1) {
+        // Clear closest route
+        if (this.map.getSource('route-closest')) {
+          this.map.getSource('route-closest').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: [] }
+          });
+        }
+      }
+      
+      if (pickupPointsWithDistance.length < 2) {
+        // Clear second route
+        if (this.map.getSource('route-second')) {
+          this.map.getSource('route-second').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: [] }
           });
         }
       }
@@ -496,8 +555,25 @@ class MapHandler {
       // Start with the vehicle location
       const vehiclePosition = this.vehicleMarker.getLngLat();
       
-      // Sort pickup points by distance from vehicle
-      const pickupPointsWithDistance = this.pickupMarkers.map((markerObj, index) => {
+      // Filter out inactive pickup points before route calculation
+      const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+        markerObj.point.is_active === true
+      );
+      
+      console.log(`Smooth route update: ${activePickupMarkers.length} active out of ${this.pickupMarkers.length} total pickup points`);
+      
+      if (activePickupMarkers.length === 0) {
+        // No active pickup points, clear all routes
+        console.log('No active pickup points, clearing all routes smoothly');
+        this.clearAllRoutes();
+        this.closestRouteInfo = null;
+        this.secondRouteInfo = null;
+        this.sortedPickupPoints = [];
+        return;
+      }
+      
+      // Sort active pickup points by distance from vehicle
+      const pickupPointsWithDistance = activePickupMarkers.map((markerObj, index) => {
         const distance = this.calculateDistance(
           vehiclePosition.lat, vehiclePosition.lng,
           markerObj.point.latitude, markerObj.point.longitude
@@ -528,6 +604,14 @@ class MapHandler {
           });
           this.closestRouteInfo = this.processRouteDetails(closestRoute);
         }
+      } else {
+        // Clear closest route if no active points
+        this.map.getSource('route-closest').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+        this.closestRouteInfo = null;
       }
       
       if (pickupPointsWithDistance.length >= 2) {
@@ -543,6 +627,14 @@ class MapHandler {
           });
           this.secondRouteInfo = this.processRouteDetails(secondRoute);
         }
+      } else {
+        // Clear second route if less than 2 active points
+        this.map.getSource('route-second').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
+        });
+        this.secondRouteInfo = null;
       }
       
       // Update remaining routes
@@ -583,36 +675,82 @@ class MapHandler {
   clearAllRoutes() {
     if (!this.map) return;
     
-    // Clear closest route
-    this.map.getSource('route-closest').setData({
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: []
-      }
-    });
+    console.log('Clearing all routes from map...');
     
-    // Clear second closest route
-    this.map.getSource('route-second').setData({
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: []
+    try {
+      // Clear multi-route system (closest, second, other routes)
+      // Clear closest route
+      if (this.map.getSource('route-closest')) {
+        this.map.getSource('route-closest').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        });
       }
-    });
-    
-    // Clear other routes
-    for (let i = 0; i < 5; i++) {
-      this.map.getSource(`route-other-${i}`).setData({
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: []
+      
+      // Clear second closest route
+      if (this.map.getSource('route-second')) {
+        this.map.getSource('route-second').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        });
+      }
+      
+      // Clear other routes
+      for (let i = 0; i < 5; i++) {
+        if (this.map.getSource(`route-other-${i}`)) {
+          this.map.getSource(`route-other-${i}`).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
+          });
         }
-      });
+      }
+      
+      // Clear single route system (main route and alternatives)
+      // Clear main route
+      if (this.map.getSource('route')) {
+        this.map.getSource('route').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        });
+      }
+      
+      // Clear alternative routes
+      for (let i = 0; i < 3; i++) {
+        if (this.map.getSource(`route-alternative-${i}`)) {
+          this.map.getSource(`route-alternative-${i}`).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
+          });
+        }
+      }
+      
+      // Reset route display state
+      this.selectedPickupPoint = null;
+      this.routesDisplayed = false;
+      
+      console.log('All routes cleared successfully');
+    } catch (error) {
+      console.error('Error clearing routes:', error);
     }
   }
   
@@ -626,17 +764,24 @@ class MapHandler {
     const vehiclePosition = this.vehicleMarker.getLngLat();
     bounds.extend([vehiclePosition.lng, vehiclePosition.lat]);
     
-    // Include all pickup points
-    this.pickupMarkers.forEach(markerObj => {
+    // Include only active pickup points
+    const activePickupMarkers = this.pickupMarkers.filter(markerObj => 
+      markerObj.point.is_active === true
+    );
+    
+    activePickupMarkers.forEach(markerObj => {
       const point = markerObj.point;
       bounds.extend([point.longitude, point.latitude]);
     });
     
-    // Fit the map to the bounds
-    this.map.fitBounds(bounds, {
-      padding: 80,
-      maxZoom: 14
-    });
+    // Only fit if we have active pickup points
+    if (activePickupMarkers.length > 0) {
+      // Fit the map to the bounds
+      this.map.fitBounds(bounds, {
+        padding: 80,
+        maxZoom: 14
+      });
+    }
   }
 
   // Get all route details for display

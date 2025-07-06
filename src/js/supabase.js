@@ -391,8 +391,9 @@ class SupabaseClient {
         {
           event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
           schema: 'public',
-          table: 'pickup_points',
-          filter: `org_id=eq.${orgId}`
+          table: 'pickup_points'
+          // Note: We can't filter by org_id directly since pickup_points doesn't have that field
+          // The filtering will be done in the callback based on the organization's vehicles
         },
         async (payload) => {
           console.log('Pickup point data received via subscription:', payload);

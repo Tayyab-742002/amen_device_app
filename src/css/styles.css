@@ -984,6 +984,20 @@ body, html {
   filter: drop-shadow(0 0 6px var(--secondary-color));
 }
 
+.pickup-marker.inactive {
+  opacity: 0.5;
+  filter: drop-shadow(0 0 6px #666) grayscale(100%);
+}
+
+/* Pickup point status indicators */
+.pickup-status-active {
+  color: var(--success-color);
+}
+
+.pickup-status-inactive {
+  color: var(--danger-color);
+}
+
 /* User images section */
 .user-images-section {
   display: flex;
@@ -1518,4 +1532,38 @@ body, html {
     margin: 5% auto;
     width: 95%;
   }
+}
+
+/* Notification animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Notification styling */
+.notification {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.notification:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
 }

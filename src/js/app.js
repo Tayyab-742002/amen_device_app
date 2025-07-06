@@ -220,6 +220,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (!pickupPointData) return;
     
+    // Check if this pickup point belongs to our organization's vehicles
+    // We need to check if the device_id matches our vehicle or any vehicle in our organization
+    if (pickupPointData.device_id && pickupPointData.device_id !== config.vehicleId) {
+      // This pickup point doesn't belong to our vehicle, ignore it
+      console.log(`Ignoring pickup point update for different vehicle: ${pickupPointData.device_id}`);
+      return;
+    }
+    
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
       // Check if this pickup point is already in our list
       const existingIndex = pickupPoints.findIndex(p => p.id === pickupPointData.id);
@@ -236,13 +244,56 @@ document.addEventListener('DOMContentLoaded', async () => {
       pickupPoints = pickupPoints.filter(p => p.id !== pickupPointData.id);
     }
     
-    // Update pickup points on the map
-    mapHandler.addPickupPoints(pickupPoints);
+    // Filter out inactive pickup points before displaying
+    const activePickupPoints = pickupPoints.filter(point => point.is_active === true);
     
-    // Update pickup point count
-    pickupPointsCountEl.textContent = `${pickupPoints.length} pickup points available`;
+    console.log(`Pickup point update: ${activePickupPoints.length} active out of ${pickupPoints.length} total pickup points`);
     
-    // Debounce route updates for pickup point changes
+    // Update pickup points on the map (only show active ones)
+    mapHandler.addPickupPoints(activePickupPoints);
+    
+    // Update pickup point count to show active vs total
+    const totalCount = pickupPoints.length;
+    const activeCount = activePickupPoints.length;
+    const inactiveCount = totalCount - activeCount;
+    
+    if (inactiveCount > 0) {
+      pickupPointsCountEl.textContent = `${activeCount} active pickup points (${inactiveCount} inactive)`;
+    } else {
+      pickupPointsCountEl.textContent = `${activeCount} pickup points available`;
+    }
+    
+    // Log the status change for debugging
+    if (eventType === 'UPDATE' && pickupPointData.is_active !== undefined) {
+      const status = pickupPointData.is_active ? 'activated' : 'deactivated';
+      console.log(`Pickup point "${pickupPointData.name}" has been ${status}`);
+      
+      // Show notification for status changes
+      showNotification(
+        `Pickup point "${pickupPointData.name}" has been ${status}`,
+        pickupPointData.is_active ? 'success' : 'warning'
+      );
+      
+      // If a pickup point was deactivated, immediately update routes
+      if (!pickupPointData.is_active) {
+        console.log('Pickup point deactivated, immediately updating routes...');
+        // Clear timeout and update routes immediately
+        clearTimeout(window.pickupRouteUpdateTimeout);
+        mapHandler.updateRoutesSmooth();
+        return; // Skip the debounced update below
+      }
+    }
+    
+    // Special handling when all pickup points become inactive
+    if (activeCount === 0 && totalCount > 0) {
+      console.log('All pickup points are now inactive, clearing all routes immediately');
+      // Clear timeout and update routes immediately
+      clearTimeout(window.pickupRouteUpdateTimeout);
+      mapHandler.updateRoutesSmooth();
+      return; // Skip the debounced update below
+    }
+    
+    // Debounce route updates for pickup point changes (only for non-deactivation events)
     clearTimeout(window.pickupRouteUpdateTimeout);
     window.pickupRouteUpdateTimeout = setTimeout(() => {
       mapHandler.updateRoutesSmooth();
@@ -413,11 +464,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         config.vehicleId
       );
       
-      // Add pickup points to map
-      mapHandler.addPickupPoints(pickupPoints);
+      // Filter out inactive pickup points before displaying
+      const activePickupPoints = pickupPoints.filter(point => point.is_active === true);
       
-      // Update pickup point count
-      pickupPointsCountEl.textContent = `${pickupPoints.length} pickup points available`;
+      // Add pickup points to map (only show active ones)
+      mapHandler.addPickupPoints(activePickupPoints);
+      
+      // Update pickup point count to show active vs total
+      const totalCount = pickupPoints.length;
+      const activeCount = activePickupPoints.length;
+      const inactiveCount = totalCount - activeCount;
+      
+      if (inactiveCount > 0) {
+        pickupPointsCountEl.textContent = `${activeCount} active pickup points (${inactiveCount} inactive)`;
+      } else {
+        pickupPointsCountEl.textContent = `${activeCount} pickup points available`;
+      }
+      
+      console.log(`Loaded ${totalCount} pickup points (${activeCount} active, ${inactiveCount} inactive)`);
       
       // Display initial route information
       try {
@@ -656,8 +720,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         );
         if (newPickupPoints) {
           pickupPoints = newPickupPoints;
-          mapHandler.addPickupPoints(pickupPoints);
-          pickupPointsCountEl.textContent = `${pickupPoints.length} pickup points available`;
+          
+          // Filter out inactive pickup points before displaying
+          const activePickupPoints = pickupPoints.filter(point => point.is_active === true);
+          
+          // Add pickup points to map (only show active ones)
+          mapHandler.addPickupPoints(activePickupPoints);
+          
+          // Update pickup point count to show active vs total
+          const totalCount = pickupPoints.length;
+          const activeCount = activePickupPoints.length;
+          const inactiveCount = totalCount - activeCount;
+          
+          if (inactiveCount > 0) {
+            pickupPointsCountEl.textContent = `${activeCount} active pickup points (${inactiveCount} inactive)`;
+          } else {
+            pickupPointsCountEl.textContent = `${activeCount} pickup points available`;
+          }
         }
       } catch (error) {
         console.error('Error refreshing pickup points:', error);
@@ -1020,27 +1099,72 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Show a notification to the user
+  // Show notification to user
   function showNotification(message, type = 'info') {
-    // Create notification element if it doesn't exist
-    let notificationEl = document.getElementById('notification');
-    if (!notificationEl) {
-      notificationEl = document.createElement('div');
-      notificationEl.id = 'notification';
-      document.body.appendChild(notificationEl);
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Add notification to the page
+    document.body.appendChild(notification);
+    
+    // Style the notification
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      border-radius: 4px;
+      color: white;
+      font-size: 14px;
+      z-index: 10000;
+      max-width: 300px;
+      word-wrap: break-word;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Set background color based on type
+    switch (type) {
+      case 'success':
+        notification.style.backgroundColor = '#10b981';
+        break;
+      case 'warning':
+        notification.style.backgroundColor = '#f59e0b';
+        break;
+      case 'error':
+        notification.style.backgroundColor = '#ef4444';
+        break;
+      default:
+        notification.style.backgroundColor = '#3b82f6';
     }
     
-    // Set notification content and type
-    notificationEl.textContent = message;
-    notificationEl.className = `notification ${type}`;
-    
-    // Show notification
-    notificationEl.style.display = 'block';
-    
-    // Hide after 5 seconds
+    // Auto-remove notification after 5 seconds
     setTimeout(() => {
-      notificationEl.style.display = 'none';
+      if (notification.parentNode) {
+        notification.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }
     }, 5000);
+    
+    // Add click to dismiss
+    notification.addEventListener('click', () => {
+      if (notification.parentNode) {
+        notification.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }
+    });
+    
+    console.log(`Notification [${type}]: ${message}`);
   }
   
   // Mark a user as verified in the UI
