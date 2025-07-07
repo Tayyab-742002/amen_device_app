@@ -706,41 +706,41 @@ class MapHandler {
     
     try {
       // Clear multi-route system (closest, second, other routes)
-      // Clear closest route
+    // Clear closest route
       if (this.map.getSource('route-closest')) {
-        this.map.getSource('route-closest').setData({
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: []
-          }
-        });
+    this.map.getSource('route-closest').setData({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: []
       }
-      
-      // Clear second closest route
+    });
+      }
+    
+    // Clear second closest route
       if (this.map.getSource('route-second')) {
-        this.map.getSource('route-second').setData({
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: []
-          }
-        });
+    this.map.getSource('route-second').setData({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: []
       }
-      
-      // Clear other routes
-      for (let i = 0; i < 5; i++) {
+    });
+      }
+    
+    // Clear other routes
+    for (let i = 0; i < 5; i++) {
         if (this.map.getSource(`route-other-${i}`)) {
-          this.map.getSource(`route-other-${i}`).setData({
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates: []
-            }
-          });
+      this.map.getSource(`route-other-${i}`).setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: []
+        }
+      });
         }
       }
       
@@ -808,11 +808,11 @@ class MapHandler {
     
     // Only fit if we have active pickup points
     if (activePickupMarkers.length > 0) {
-      // Fit the map to the bounds
-      this.map.fitBounds(bounds, {
-        padding: 80,
-        maxZoom: 14
-      });
+    // Fit the map to the bounds
+    this.map.fitBounds(bounds, {
+      padding: 80,
+      maxZoom: 14
+    });
     }
   }
 
@@ -1017,15 +1017,15 @@ class MapHandler {
     
     // Waypoint information if available
     if (this.routeDetails && this.routeDetails.waypoints) {
-      routeInfo.waypoints = this.routeDetails.waypoints.map(waypoint => ({
-        name: waypoint.name,
-        location: waypoint.location
-      }));
+    routeInfo.waypoints = this.routeDetails.waypoints.map(waypoint => ({
+      name: waypoint.name,
+      location: waypoint.location
+    }));
     }
     
     // Add alternative routes count if available
     if (this.routeDetails && this.routeDetails.routes) {
-      routeInfo.alternativeRoutesCount = this.routeDetails.routes.length - 1;
+    routeInfo.alternativeRoutesCount = this.routeDetails.routes.length - 1;
     }
     
     // Original route data if needed for reference
@@ -1535,7 +1535,7 @@ class MapHandler {
 }
 
 // Create map handler instance
-const mapHandler = new MapHandler();
+const mapHandler = new MapHandler(); 
 
 // Make mapHandler globally available
 window.mapHandler = mapHandler;

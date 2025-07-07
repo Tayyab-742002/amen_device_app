@@ -63,3 +63,10 @@ The application uses a comprehensive PostgreSQL database with the following key 
 - `location_data`: GPS tracking data
 - `notification_history`: Alert and notification management
 - `organizations`: Multi-tenant organization structure
+
+<div id="container">
+  <div id="left-sidebar">...</div>
+  <div id="map"></div>
+  <div id="right-sidebar">...</div>
+</div>
+<div id="bottom-bar">...</div>

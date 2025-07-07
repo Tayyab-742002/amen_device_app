@@ -106,17 +106,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Load pickup points
       loadPickupPoints();
       
-      // Load user images
-      loadUserImages();
+      // Load user verification status
+      await loadUserVerifications();
       
-              // Load user verification status
-        loadUserVerifications();
-        
-        // Setup passenger counter subscription
-        setupPassengerCounterSubscription();
-        
-        // Subscribe to real-time updates
-        setupRealTimeSubscriptions();
+      // Load user images
+      await loadUserImages();
+      
+      // Setup passenger counter subscription
+      setupPassengerCounterSubscription();
+      
+      // Subscribe to real-time updates
+      setupRealTimeSubscriptions();
       
       // Setup event listeners
       setupEventListeners();
@@ -596,15 +596,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadUserImages() {
     try {
       userImagesContainerEl.innerHTML = '<div class="loading">Loading user images...</div>';
-      
+      // Always reload verifications before images
+      await loadUserVerifications();
       userImages = await window.supabase.getUserImagesByOrgAndVehicle(
         config.organizationId,
         config.vehicleId
       );
-      
       displayUserImages();
-      
-      // Update passenger counters after loading user images
       updatePassengerCounters();
     } catch (error) {
       console.error('Error loading user images:', error);
@@ -699,7 +697,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             ${verified ? '<div class="verified-badge">✓</div>' : ''}
           </div>
           <div class="user-image-username">${username}</div>
-          ${verified ? '<div class="verification-status">Verified</div>' : ''}
         </div>
       `;
     });
@@ -785,7 +782,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <div class="route-info-item">
                 <span class="info-label">Updated:</span> 
                 <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
-              </div>` : ''}
+            </div>` : ''}
           </div>
           ${closestPoint && (closestPoint.user_name || closestPoint.user_email || closestPoint.user_phone) ? `
           <div class="route-user-info">
@@ -837,7 +834,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <div class="route-info-item">
                 <span class="info-label">Updated:</span> 
                 <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
-              </div>` : ''}
+            </div>` : ''}
           </div>
           ${secondPoint && (secondPoint.user_name || secondPoint.user_email || secondPoint.user_phone) ? `
           <div class="route-user-info">
