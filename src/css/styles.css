@@ -1234,25 +1234,58 @@ body, html {
 }
 
 /* Verified badge styles */
+
+
+.user-image-item.verified .user-image-container {
+  border: 2px solid var(--success-color);
+  box-shadow: 0 0 10px rgba(35, 134, 54, 0.3);
+}
+
+/* Verification status text */
+.verification-status {
+  font-size: 0.75rem;
+  color: var(--success-color);
+  font-weight: 600;
+  text-align: center;
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Enhanced verified badge styling */
 .verified-badge {
   position: absolute;
   top: 5px;
   right: 5px;
   background-color: var(--success-color);
   color: white;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  z-index: 5;
+  font-size: 14px;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  border: 2px solid white;
+  animation: verification-pulse 2s ease-in-out;
 }
 
-.user-image-item.verified .user-image-container {
-  border: 2px solid var(--success-color);
+@keyframes verification-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(35, 134, 54, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
 }
 
 /* User verification button */

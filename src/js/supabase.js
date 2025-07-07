@@ -584,6 +584,206 @@ class SupabaseClient {
       return { success: false, error: error.message };
     }
   }
+
+  // User Verification API Methods
+  
+  // Create or update user verification record (UPDATED FOR NEW SCHEMA)
+  async createUserVerification(verificationData) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      const username = verificationData.verificationData?.person_name;
+      console.log('🟣 Processing verification for:', username);
+      
+      // Step 1: Check if verification already exists by username
+      const { data: existingVerification, error: checkError } = await this.client
+        .from('user_verification')
+        .select('*')
+        .eq('username', username)
+        .eq('org_id', verificationData.organizationId)
+        .eq('vehicle_id', verificationData.vehicleId)
+        .limit(1);
+      
+      let result;
+      
+      if (existingVerification && existingVerification.length > 0) {
+        // Update existing verification
+        console.log('🟣 Updating existing verification for:', username);
+        const { data, error } = await this.client
+          .from('user_verification')
+          .update({
+            is_verified: true,
+            verified_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingVerification[0].id)
+          .select()
+          .single();
+          
+        if (error) throw error;
+        result = data;
+        console.log('🟣 Updated verification record');
+      } else {
+        // Create new verification
+        console.log('🟣 Creating new verification for:', username);
+        const { data, error } = await this.client
+          .from('user_verification')
+          .insert({
+            username: username,
+            org_id: verificationData.organizationId,
+            vehicle_id: verificationData.vehicleId,
+            is_verified: true,
+            verified_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (error) throw error;
+        result = data;
+        console.log('🟣 Created new verification record');
+      }
+
+      return { success: true, data: result };
+    } catch (error) {
+      console.error('🔴 Error in createUserVerification:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Check if a user is already verified for a specific organization/vehicle
+  async getUserVerificationStatus(username, organizationId, vehicleId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      const { data, error } = await this.client
+        .from('user_verification')
+        .select('*')
+        .eq('username', username)
+        .eq('org_id', organizationId)
+        .eq('vehicle_id', vehicleId)
+        .eq('is_verified', true)
+        .order('verified_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      const isVerified = data && data.length > 0;
+      const verificationRecord = isVerified ? data[0] : null;
+
+      return { 
+        success: true, 
+        isVerified,
+        verificationRecord,
+        data: verificationRecord
+      };
+    } catch (error) {
+      console.error('Error checking user verification status:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Get all verification records for users in an organization
+  async getOrganizationVerifications(organizationId, vehicleId = null) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      let query = this.client
+        .from('user_verification')
+        .select('*')
+        .eq('org_id', organizationId)
+        .eq('is_verified', true);
+
+      // If vehicle is specified, filter by it
+      if (vehicleId) {
+        query = query.eq('vehicle_id', vehicleId);
+      }
+
+      const { data, error } = await query
+        .order('verified_at', { ascending: false });
+
+      if (error) throw error;
+
+      console.log('Organization verification records:', data);
+      return { success: true, data: data || [] };
+    } catch (error) {
+      console.error('Error fetching organization verifications:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Get user ID by username
+  async getUserIdByUsername(username) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      const { data, error } = await this.client
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .single();
+
+      if (error) {
+        // If user not found, try searching by name field
+        const { data: nameData, error: nameError } = await this.client
+          .from('users')
+          .select('id')
+          .ilike('name', username)
+          .limit(1)
+          .single();
+
+        if (nameError) {
+          console.log(`User not found for username: ${username}`);
+          return { success: false, error: 'User not found' };
+        }
+
+        return { success: true, data: nameData.id };
+      }
+
+      return { success: true, data: data.id };
+    } catch (error) {
+      console.error('Error getting user ID by username:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Call user verification edge function
+  async callUserVerificationEdgeFunction(userId) {
+    try {
+      const response = await fetch('https://knmhbgyxtpecuftjuheq.supabase.co/functions/v1/user-verification', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer amen',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('User verification edge function called successfully:', data);
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error calling user verification edge function:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 // Export a singleton instance

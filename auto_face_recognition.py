@@ -544,7 +544,7 @@ class AutoFaceRecognition:
         safe_print("Looking for faces... (Press 'q' to quit)")
         
         # Variables for auto-close
-        verification_successful = False
+
         verification_result = None
         
         # Set timeout for auto-close mode
@@ -563,7 +563,6 @@ class AutoFaceRecognition:
             if auto_close and self.verification_results:
                 person_name, confidence, _ = self.verification_results
                 if confidence >= self.min_confidence:
-                    verification_successful = True
                     verification_result = {
                         "success": True,
                         "person_name": person_name,

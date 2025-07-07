@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let pickupPointSubscription;
   let routeInfo;
   let userImages = [];
+  let userVerifications = {}; // Store verification status for users
 
   // Initialize the application
   async function initApp() {
@@ -102,6 +103,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Load user images
       loadUserImages();
+      
+      // Load user verification status
+      loadUserVerifications();
       
       // Subscribe to real-time updates
       setupRealTimeSubscriptions();
@@ -187,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Update vehicle marker on map
     if (typeof mapHandler !== 'undefined') {
-      mapHandler.updateVehiclePosition(locationData.longitude, locationData.latitude);
+    mapHandler.updateVehiclePosition(locationData.longitude, locationData.latitude);
     }
     
     // Only update routes if location has changed significantly (more than 10 meters)
@@ -197,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       clearTimeout(window.routeUpdateTimeout);
       window.routeUpdateTimeout = setTimeout(() => {
         if (typeof mapHandler !== 'undefined') {
-          mapHandler.updateRoutesSmooth();
+        mapHandler.updateRoutesSmooth();
           // Trigger real-time route data calculation for accurate distance/duration
           mapHandler.calculateRealTimeRouteData();
         }
@@ -532,10 +536,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Display initial route information
       try {
         if (typeof mapHandler !== 'undefined') {
-          const initialRouteInfo = await mapHandler.showAllRoutes();
-          if (initialRouteInfo) {
-            routeInfo = initialRouteInfo;
-            displayRouteInfo();
+        const initialRouteInfo = await mapHandler.showAllRoutes();
+        if (initialRouteInfo) {
+          routeInfo = initialRouteInfo;
+          displayRouteInfo();
             
             // Trigger initial real-time route calculation for accurate data
             setTimeout(() => {
@@ -543,8 +547,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 mapHandler.calculateRealTimeRouteData();
               }
             }, 1000);
-          } else {
-            routeInfoEl.innerHTML = '<div class="error">Could not load route information</div>';
+        } else {
+          routeInfoEl.innerHTML = '<div class="error">Could not load route information</div>';
           }
         } else {
           routeInfoEl.innerHTML = '<div class="error">Map handler not available</div>';
@@ -577,6 +581,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   
+  // Load user verification status
+  async function loadUserVerifications() {
+    try {
+      console.log('Loading user verification status...');
+      
+      const verificationResult = await window.supabase.getOrganizationVerifications(
+        config.organizationId,
+        config.vehicleId
+      );
+      
+      if (verificationResult.success && verificationResult.data) {
+        // Create a lookup object for quick verification status checking
+        userVerifications = {};
+        
+        verificationResult.data.forEach(verification => {
+          // Use username as the key since we no longer have user_id
+          userVerifications[verification.username] = {
+            isVerified: verification.is_verified,
+            verifiedAt: verification.verified_at,
+            userName: verification.username
+          };
+        });
+        
+        console.log('Loaded verification status for', Object.keys(userVerifications).length, 'users');
+        console.log('User verifications:', userVerifications);
+      } else {
+        console.error('Failed to load user verifications:', verificationResult.error);
+        userVerifications = {};
+      }
+    } catch (error) {
+      console.error('Error loading user verifications:', error);
+      userVerifications = {};
+    }
+  }
+  
+  // Check if a user is verified by their username
+  function isUserVerified(userId, userName) {
+    // Check by username (primary method now)
+    if (userName && userVerifications[userName]) {
+      return userVerifications[userName].isVerified;
+    }
+    
+    // Fallback: check by user ID if available
+    if (userId && userVerifications[userId]) {
+      return userVerifications[userId].isVerified;
+    }
+    
+    return false;
+  }
+  
   // Display user images in the grid
   function displayUserImages() {
     if (!userImagesContainerEl) return;
@@ -596,15 +650,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       const imageUrl = imageData.image_url;
       // Check if username is available in the data
       const username = imageData.username || imageData.user_name || `User ${index + 1}`;
+      const userId = imageData.user_id || imageData.id;
       
       if (!imageUrl) return;
       
+      // Check if user is verified
+      const verified = isUserVerified(userId, username);
+      const verifiedClass = verified ? 'verified' : '';
+      
       imagesHtml += `
-        <div class="user-image-item" data-index="${index}">
+        <div class="user-image-item ${verifiedClass}" data-index="${index}" data-user-id="${userId || ''}" data-username="${username}">
           <div class="user-image-container">
             <img src="${imageUrl}" alt="${username}" loading="lazy" />
+            ${verified ? '<div class="verified-badge">✓</div>' : ''}
           </div>
           <div class="user-image-username">${username}</div>
+          ${verified ? '<div class="verification-status">Verified</div>' : ''}
         </div>
       `;
     });
@@ -653,55 +714,55 @@ document.addEventListener('DOMContentLoaded', async () => {
       const lastUpdated = closestData.lastUpdated;
       
       if (distance && duration) {
-        routesHtml += `
-          <div class="route-card closest-route">
-            <div class="route-header">
+      routesHtml += `
+        <div class="route-card closest-route">
+          <div class="route-header">
               <div class="route-header-left">
-                <span class="route-indicator" style="background-color: #2ecc71;"></span>
-                <h3>Closest Route</h3>
+            <span class="route-indicator" style="background-color: #2ecc71;"></span>
+            <h3>Closest Route</h3>
               </div>
               ${lastUpdated ? `<span class="update-time" title="Last updated: ${new Date(lastUpdated).toLocaleTimeString()}">🔄</span>` : ''}
-            </div>
-            <div class="route-body">
-              <div class="route-info-item">
-                <span class="info-label">Distance:</span> 
+          </div>
+          <div class="route-body">
+            <div class="route-info-item">
+              <span class="info-label">Distance:</span> 
                 <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDistance(distance) : `${(distance / 1000).toFixed(2)} km`}</span>
-              </div>
-              <div class="route-info-item">
-                <span class="info-label">Duration:</span> 
+            </div>
+            <div class="route-info-item">
+              <span class="info-label">Duration:</span> 
                 <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDuration(duration) : `${Math.floor(duration / 60)} minutes`}</span>
-              </div>
+            </div>
               ${closestRoute && closestRoute.averageSpeed ? `
-              <div class="route-info-item">
-                <span class="info-label">Avg Speed:</span> 
-                <span class="info-value">${Math.round(closestRoute.averageSpeed)} km/h</span>
-              </div>` : ''}
+            <div class="route-info-item">
+              <span class="info-label">Avg Speed:</span> 
+              <span class="info-value">${Math.round(closestRoute.averageSpeed)} km/h</span>
+            </div>` : ''}
               ${closestRoute && closestRoute.maxspeedInfo ? `
-              <div class="route-info-item">
-                <span class="info-label">Speed Limit:</span> 
-                <span class="info-value">${closestRoute.maxspeedInfo.highest} ${closestRoute.maxspeedInfo.units}</span>
-              </div>` : ''}
-              ${closestPoint && closestPoint.name ? `
-              <div class="route-info-item">
-                <span class="info-label">Destination:</span> 
-                <span class="info-value">${closestPoint.name}</span>
-              </div>` : ''}
+            <div class="route-info-item">
+              <span class="info-label">Speed Limit:</span> 
+              <span class="info-value">${closestRoute.maxspeedInfo.highest} ${closestRoute.maxspeedInfo.units}</span>
+            </div>` : ''}
+            ${closestPoint && closestPoint.name ? `
+            <div class="route-info-item">
+              <span class="info-label">Destination:</span> 
+              <span class="info-value">${closestPoint.name}</span>
+            </div>` : ''}
               ${lastUpdated ? `
               <div class="route-info-item">
                 <span class="info-label">Updated:</span> 
                 <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
               </div>` : ''}
-            </div>
-            ${closestPoint && (closestPoint.user_name || closestPoint.user_email || closestPoint.user_phone) ? `
-            <div class="route-user-info">
-              <h4>Pickup Point Owner</h4>
-              ${closestPoint.user_name ? `<p><strong>Name:</strong> ${closestPoint.user_name}</p>` : ''}
-              ${closestPoint.user_email ? `<p><strong>Email:</strong> ${closestPoint.user_email}</p>` : ''}
-              ${closestPoint.user_phone ? `<p><strong>Phone:</strong> ${closestPoint.user_phone}</p>` : ''}
-            </div>` : ''}
           </div>
-        `;
-      }
+          ${closestPoint && (closestPoint.user_name || closestPoint.user_email || closestPoint.user_phone) ? `
+          <div class="route-user-info">
+            <h4>Pickup Point Owner</h4>
+            ${closestPoint.user_name ? `<p><strong>Name:</strong> ${closestPoint.user_name}</p>` : ''}
+            ${closestPoint.user_email ? `<p><strong>Email:</strong> ${closestPoint.user_email}</p>` : ''}
+            ${closestPoint.user_phone ? `<p><strong>Phone:</strong> ${closestPoint.user_phone}</p>` : ''}
+          </div>` : ''}
+        </div>
+      `;
+    }
     }
     
     // Add second closest route info (yellow) with real-time data
@@ -715,44 +776,44 @@ document.addEventListener('DOMContentLoaded', async () => {
       const lastUpdated = secondData.lastUpdated;
       
       if (distance && duration) {
-        routesHtml += `
-          <div class="route-card second-route">
-            <div class="route-header">
+      routesHtml += `
+        <div class="route-card second-route">
+          <div class="route-header">
               <div class="route-header-left">
-                <span class="route-indicator" style="background-color: #f1c40f;"></span>
-                <h3>Second Closest Route</h3>
+            <span class="route-indicator" style="background-color: #f1c40f;"></span>
+            <h3>Second Closest Route</h3>
               </div>
               ${lastUpdated ? `<span class="update-time" title="Last updated: ${new Date(lastUpdated).toLocaleTimeString()}">🔄</span>` : ''}
-            </div>
-            <div class="route-body">
-              <div class="route-info-item">
-                <span class="info-label">Distance:</span> 
+          </div>
+          <div class="route-body">
+            <div class="route-info-item">
+              <span class="info-label">Distance:</span> 
                 <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDistance(distance) : `${(distance / 1000).toFixed(2)} km`}</span>
-              </div>
-              <div class="route-info-item">
-                <span class="info-label">Duration:</span> 
+            </div>
+            <div class="route-info-item">
+              <span class="info-label">Duration:</span> 
                 <span class="info-value">${typeof mapHandler !== 'undefined' ? mapHandler.formatDuration(duration) : `${Math.floor(duration / 60)} minutes`}</span>
-              </div>
-              ${secondPoint && secondPoint.name ? `
-              <div class="route-info-item">
-                <span class="info-label">Destination:</span> 
-                <span class="info-value">${secondPoint.name}</span>
-              </div>` : ''}
+            </div>
+            ${secondPoint && secondPoint.name ? `
+            <div class="route-info-item">
+              <span class="info-label">Destination:</span> 
+              <span class="info-value">${secondPoint.name}</span>
+            </div>` : ''}
               ${lastUpdated ? `
               <div class="route-info-item">
                 <span class="info-label">Updated:</span> 
                 <span class="info-value">${new Date(lastUpdated).toLocaleTimeString()}</span>
               </div>` : ''}
-            </div>
-            ${secondPoint && (secondPoint.user_name || secondPoint.user_email || secondPoint.user_phone) ? `
-            <div class="route-user-info">
-              <h4>Pickup Point Owner</h4>
-              ${secondPoint.user_name ? `<p><strong>Name:</strong> ${secondPoint.user_name}</p>` : ''}
-              ${secondPoint.user_email ? `<p><strong>Email:</strong> ${secondPoint.user_email}</p>` : ''}
-              ${secondPoint.user_phone ? `<p><strong>Phone:</strong> ${secondPoint.user_phone}</p>` : ''}
-            </div>` : ''}
           </div>
-        `;
+          ${secondPoint && (secondPoint.user_name || secondPoint.user_email || secondPoint.user_phone) ? `
+          <div class="route-user-info">
+            <h4>Pickup Point Owner</h4>
+            ${secondPoint.user_name ? `<p><strong>Name:</strong> ${secondPoint.user_name}</p>` : ''}
+            ${secondPoint.user_email ? `<p><strong>Email:</strong> ${secondPoint.user_email}</p>` : ''}
+            ${secondPoint.user_phone ? `<p><strong>Phone:</strong> ${secondPoint.user_phone}</p>` : ''}
+          </div>` : ''}
+        </div>
+      `;
       }
     }
     
@@ -838,7 +899,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Update routes smoothly
       if (typeof mapHandler !== 'undefined') {
-        mapHandler.updateRoutesSmooth();
+      mapHandler.updateRoutesSmooth();
       }
       
       showNotification('Routes and location refreshed', 'success');
@@ -868,11 +929,75 @@ document.addEventListener('DOMContentLoaded', async () => {
         const result = await window.electronAPI.runFaceVerification();
         
         if (result && result.success) {
+         
           // Update UI to show verified user
           showNotification(`User verified: ${result.person_name} (${result.confidence.toFixed(1)}%)`, 'success');
           
           // Mark the user as verified in the UI
           markUserAsVerified(result.person_name);
+          
+          // Create or update verification record - SIMPLE APPROACH
+          try {
+            console.log('🟣 Creating verification record for:', result.person_name);
+            
+            const verificationData = {
+              userId: null,
+              organizationId: config.organizationId,
+              vehicleId: config.vehicleId,
+              verificationMethod: 'face_recognition',
+              verificationData: {
+                confidence: result.confidence,
+                person_name: result.person_name,
+                verification_timestamp: new Date().toISOString()
+              }
+            };
+            
+            console.log("🟣 Verification data:", verificationData);
+            
+            // Just create the verification record - the API will handle everything
+            const verificationResult = await window.supabase.createUserVerification(verificationData);
+            
+            if (verificationResult.success) {
+              console.log('🟣 Verification record created successfully!');
+              showNotification(`✅ ${result.person_name} verified and saved!`, 'success');
+              
+              // Call the user verification edge function
+              try {
+                console.log('🟣 Getting user ID for edge function call...');
+                const userResult = await window.supabase.getUserIdByUsername(result.person_name);
+                
+                if (userResult.success && userResult.data) {
+                  console.log('🟣 Calling user verification edge function for user ID:', userResult.data);
+                  const edgeFunctionResult = await window.supabase.callUserVerificationEdgeFunction(userResult.data);
+                  
+                  if (edgeFunctionResult.success) {
+                    console.log('🟣 Edge function called successfully');
+                    showNotification('User verification notification sent!', 'success');
+                  } else {
+                    console.warn('⚠️ Edge function call failed:', edgeFunctionResult.error);
+                    showNotification('Verification saved but notification failed', 'warning');
+                  }
+                } else {
+                  console.warn('⚠️ Could not find user ID for edge function call:', userResult.error);
+                  showNotification('Verification saved but user not found for notification', 'warning');
+                }
+              } catch (edgeError) {
+                console.error('🔴 Error calling edge function:', edgeError);
+                showNotification('Verification saved but notification failed', 'warning');
+              }
+              
+              // Refresh the display
+              await loadUserVerifications();
+              await loadUserImages();
+            } else {
+              console.error('🔴 Failed to save verification:', verificationResult.error);
+              showNotification('Verification successful but failed to save record', 'warning');
+            }
+            
+          } catch (verificationError) {
+            console.error('🔴 Error saving verification:', verificationError);
+            showNotification('Verification successful but failed to save record', 'warning');
+          }
         } else {
           // Show error notification
           showNotification(result.error || 'Verification failed or was cancelled', 'error');
@@ -1263,26 +1388,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log(`Notification [${type}]: ${message}`);
   }
   
-  // Mark a user as verified in the UI
-  function markUserAsVerified(username) {
-    // Find the user image element
-    const userImages = document.querySelectorAll('.user-image-item');
-    
-    userImages.forEach(userImage => {
-      const usernameEl = userImage.querySelector('.user-image-username');
-      if (usernameEl && usernameEl.textContent.includes(username)) {
-        // Add verified class to the user image
-        userImage.classList.add('verified');
-        
-        // Add verified badge if it doesn't exist
-        if (!userImage.querySelector('.verified-badge')) {
-          const badge = document.createElement('div');
-          badge.className = 'verified-badge';
-          badge.innerHTML = '✓';
-          userImage.appendChild(badge);
-        }
-      }
-    });
+  // Mark a user as verified in the UI (legacy function - now handled by data reload)
+  async function markUserAsVerified(username) {
+    console.log(`Marking user as verified: ${username}`);
+    // The verification status will be updated through data reload
+    // This function is kept for backward compatibility but the actual
+    // verification display is now handled by displayUserImages()
   }
 
   // Initialize the application
