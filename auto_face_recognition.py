@@ -10,14 +10,22 @@ import cv2
 import numpy as np
 from typing import Dict, Any, List, Tuple, Optional
 from dotenv import load_dotenv
-from PIL import Image
 import tempfile
 import requests
 import datetime
 import threading
 import queue
-import shutil
 import json
+
+# Lazy import PIL only when needed for resizing
+PIL_Image = None
+
+def get_pil_image():
+    global PIL_Image
+    if PIL_Image is None:
+        from PIL import Image
+        PIL_Image = Image
+    return PIL_Image
 
 # Function to safely print text without emoji characters
 def safe_print(text):
@@ -49,15 +57,15 @@ class AutoFaceRecognition:
         self.api_secret = api_secret
         self.base_url = "https://api-us.faceplusplus.com/facepp/v3"
         
-        # Face detection parameters
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        # Face detection parameters - lazy load cascade
+        self.face_cascade = None
         
-        # Capture parameters
-        self.countdown_duration = 3  # seconds
-        self.min_face_size = (100, 100)  # minimum face size to start countdown
-        self.stability_threshold = 0.8  # how stable the face needs to be during countdown
-        self.min_confidence = 80.0  # minimum confidence for face verification (updated to 80%)
-        self.capture_cooldown = 3  # seconds between captures
+        # Capture parameters - optimized for immediate verification
+        self.countdown_duration = 1  # reduced from 3 to 1 second
+        self.min_face_size = (80, 80)  # reduced from (100, 100) for faster detection
+        self.stability_threshold = 0.6  # reduced from 0.8 for faster capture
+        self.min_confidence = 80.0  # minimum confidence for face verification
+        self.capture_cooldown = 1  # reduced from 3 to 1 second between captures
         
         # Verification queue and thread
         self.verification_queue = queue.Queue()
@@ -86,6 +94,12 @@ class AutoFaceRecognition:
         self.stop_cleanup = False
         self.captured_files = {}  # Dict of {filepath: timestamp}
         
+    def _get_face_cascade(self):
+        """Lazy load face cascade classifier"""
+        if self.face_cascade is None:
+            self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        return self.face_cascade
+        
     def _resize_image_if_needed(self, image_path: str, max_size_kb: int = 1000) -> str:
         """
         Resize image if it's too large for the API
@@ -106,6 +120,7 @@ class AutoFaceRecognition:
         
         try:
             # Open and resize image
+            Image = get_pil_image()
             img = Image.open(image_path)
             
             # Calculate new dimensions to maintain aspect ratio
@@ -166,6 +181,7 @@ class AutoFaceRecognition:
         
         # Convert from BGR to RGB (OpenCV uses BGR by default)
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        Image = get_pil_image()
         img = Image.fromarray(rgb_frame)
         img.save(temp_path, quality=85)
         
@@ -478,13 +494,14 @@ class AutoFaceRecognition:
         if self.cleanup_thread and self.cleanup_thread.is_alive():
             self.cleanup_thread.join(timeout=2)
     
-    def run(self, auto_close=False, result_file_path=None):
+    def run(self, auto_close=False, result_file_path=None, fast_mode=True):
         """
         Run the automated facial recognition system
         
         Args:
             auto_close: Whether to automatically close after successful verification
             result_file_path: Path to save verification result as JSON
+            fast_mode: Enable fast mode for immediate verification (skips some stability checks)
         """
         safe_print("\nStarting Automated Facial Recognition...")
         
@@ -495,24 +512,36 @@ class AutoFaceRecognition:
         # Start verification thread
         self.start_verification_thread()
         
-        # Start cleanup thread
-        self.start_cleanup_thread()
+        # Start cleanup thread (only if not in fast mode to reduce overhead)
+        if not fast_mode:
+            self.start_cleanup_thread()
         
-        # Initialize webcam
+        # Initialize webcam with optimized settings
         try:
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
                 safe_print("Could not open webcam")
                 return
                 
-            # Set landscape mode (higher width than height)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            # Set optimized resolution for faster processing
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Reduced from 1280
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)  # Reduced from 720
+            cap.set(cv2.CAP_PROP_FPS, 30)  # Set higher FPS for smoother experience
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer size for lower latency
+            
+            # Warm up the camera by capturing a few frames
+            for _ in range(3):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
         except Exception as e:
             safe_print(f"Error initializing webcam: {str(e)}")
             return
         
-        safe_print("\nLooking for faces... (Press 'q' to quit)")
+        mode_text = "Fast Mode - Immediate Verification" if fast_mode else "Normal Mode - Stability Checks"
+        safe_print(f"\n{mode_text}")
+        safe_print("Looking for faces... (Press 'q' to quit)")
         
         # Variables for auto-close
         verification_successful = False
@@ -520,7 +549,7 @@ class AutoFaceRecognition:
         
         # Set timeout for auto-close mode
         start_time = time.time()
-        timeout = 30  # 30 seconds timeout for auto-close mode
+        timeout = 15 if fast_mode else 30  # Reduced timeout for fast mode
         
         # Main loop
         while True:
@@ -587,13 +616,15 @@ class AutoFaceRecognition:
             
             # Detect faces using OpenCV (faster than API)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
+            face_cascade = self._get_face_cascade()
+            faces = face_cascade.detectMultiScale(gray, 1.1, 3, minSize=self.min_face_size)
             
             # Get current time
             current_time = time.time()
             
             # Show basic UI
-            cv2.putText(display_frame, "Automated Face Recognition", (10, 30), 
+            ui_text = "Fast Face Recognition" if fast_mode else "Automated Face Recognition"
+            cv2.putText(display_frame, ui_text, (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.putText(display_frame, "Press 'q' to quit", (10, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
@@ -644,57 +675,79 @@ class AutoFaceRecognition:
                 
                 # Check if face is in range
                 if self.is_face_in_range(largest_face):
-                    # Track face position for stability check
-                    if self.countdown_active:
-                        self.face_positions.append(largest_face)
-                        
-                        # Calculate time remaining
-                        elapsed = current_time - self.countdown_start_time
-                        remaining = max(0, self.countdown_duration - elapsed)
-                        
-                        if remaining > 0:
-                            # Still counting down
-                            cv2.putText(display_frame, f"Capturing in: {remaining:.1f}s", (x, y - 10), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    if fast_mode:
+                        # Fast mode: immediate capture without stability checks
+                        if current_time - self.last_capture_time > self.capture_cooldown:
+                            safe_print("Fast mode: Capturing immediately...")
+                            
+                            # Save frame to temp file for verification
+                            temp_path = self.save_frame_to_temp(frame)
+                            
+                            # Add to verification queue
+                            self.verification_queue.put((frame.copy(), temp_path))
+                            
+                            # Update last capture time
+                            self.last_capture_time = current_time
+                            
+                            # Show capture message
+                            cv2.putText(display_frame, "Captured!", (x, y - 10), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                         else:
-                            # Countdown finished, check stability
-                            stability = self.calculate_face_stability(self.face_positions)
+                            # Show cooldown message
+                            cv2.putText(display_frame, "Processing...", (x, y - 10), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    else:
+                        # Normal mode: Track face position for stability check
+                        if self.countdown_active:
+                            self.face_positions.append(largest_face)
                             
-                            if stability >= self.stability_threshold:
-                                # Face was stable, capture it
-                                safe_print(f"Face stable ({stability:.2f}), capturing...")
-                                
-                                # Save frame to temp file for verification
-                                temp_path = self.save_frame_to_temp(frame)
-                                
-                                # Add to verification queue
-                                self.verification_queue.put((frame.copy(), temp_path))
-                                
-                                # Update last capture time
-                                self.last_capture_time = current_time
-                                
-                                # Show capture message
-                                cv2.putText(display_frame, "Captured!", (x, y - 10), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                            # Calculate time remaining
+                            elapsed = current_time - self.countdown_start_time
+                            remaining = max(0, self.countdown_duration - elapsed)
+                            
+                            if remaining > 0:
+                                # Still counting down
+                                cv2.putText(display_frame, f"Capturing in: {remaining:.1f}s", (x, y - 10), 
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                             else:
-                                # Face was not stable enough
-                                safe_print(f"Face not stable enough ({stability:.2f}), cancelling capture")
-                                cv2.putText(display_frame, "Too much movement", (x, y - 10), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                            
-                            # Reset countdown
-                            self.countdown_active = False
-                            self.face_positions = []
-                    
-                    elif current_time - self.last_capture_time > self.capture_cooldown:
-                        # Start new countdown
-                        self.countdown_active = True
-                        self.countdown_start_time = current_time
-                        self.face_positions = [largest_face]
+                                # Countdown finished, check stability
+                                stability = self.calculate_face_stability(self.face_positions)
+                                
+                                if stability >= self.stability_threshold:
+                                    # Face was stable, capture it
+                                    safe_print(f"Face stable ({stability:.2f}), capturing...")
+                                    
+                                    # Save frame to temp file for verification
+                                    temp_path = self.save_frame_to_temp(frame)
+                                    
+                                    # Add to verification queue
+                                    self.verification_queue.put((frame.copy(), temp_path))
+                                    
+                                    # Update last capture time
+                                    self.last_capture_time = current_time
+                                    
+                                    # Show capture message
+                                    cv2.putText(display_frame, "Captured!", (x, y - 10), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                else:
+                                    # Face was not stable enough
+                                    safe_print(f"Face not stable enough ({stability:.2f}), cancelling capture")
+                                    cv2.putText(display_frame, "Too much movement", (x, y - 10), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                                
+                                # Reset countdown
+                                self.countdown_active = False
+                                self.face_positions = []
                         
-                        safe_print("Face in range, starting countdown...")
-                        cv2.putText(display_frame, "Starting countdown...", (x, y - 10), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        elif current_time - self.last_capture_time > self.capture_cooldown:
+                            # Start new countdown
+                            self.countdown_active = True
+                            self.countdown_start_time = current_time
+                            self.face_positions = [largest_face]
+                            
+                            safe_print("Face in range, starting countdown...")
+                            cv2.putText(display_frame, "Starting countdown...", (x, y - 10), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 else:
                     # Face is too small/far away
                     if self.countdown_active:
@@ -724,7 +777,8 @@ class AutoFaceRecognition:
         cap.release()
         cv2.destroyAllWindows()
         self.stop_verification_thread()
-        self.stop_cleanup_thread()
+        if not fast_mode:
+            self.stop_cleanup_thread()
         safe_print("Webcam released")
 
 def main():
@@ -745,7 +799,12 @@ def main():
         parser.add_argument('--captured-dir', type=str, help='Directory to save captured faces')
         parser.add_argument('--result-file', type=str, help='File to save verification result')
         parser.add_argument('--auto-close', action='store_true', help='Auto-close after successful verification')
+        parser.add_argument('--fast-mode', action='store_true', default=True, help='Enable fast mode for immediate verification')
+        parser.add_argument('--normal-mode', action='store_true', help='Use normal mode with stability checks')
         args = parser.parse_args()
+        
+        # Determine mode
+        fast_mode = args.fast_mode and not args.normal_mode
         
         # Get API credentials from environment variables
         API_KEY = os.getenv("FACEPP_API_KEY", "")
@@ -778,8 +837,12 @@ def main():
         # Store result file path
         result_file_path = args.result_file if args.result_file else None
         
+        # Print mode information
+        mode_text = "Fast Mode (Immediate Verification)" if fast_mode else "Normal Mode (Stability Checks)"
+        safe_print(f"Running in: {mode_text}")
+        
         # Run the system with auto-close option if specified
-        system.run(auto_close=args.auto_close, result_file_path=result_file_path)
+        system.run(auto_close=args.auto_close, result_file_path=result_file_path, fast_mode=fast_mode)
     
     except Exception as e:
         # Handle any unexpected errors
