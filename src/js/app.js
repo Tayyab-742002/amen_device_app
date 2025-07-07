@@ -209,9 +209,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       clearTimeout(window.routeUpdateTimeout);
       window.routeUpdateTimeout = setTimeout(() => {
         if (typeof mapHandler !== 'undefined') {
-        mapHandler.updateRoutesSmooth();
+        mapHandler.updateRoutesSmooth().then(() => {
+          // Update the sidebar route information after routes are updated
+          if (window.displayRouteInfo) {
+            window.displayRouteInfo();
+          }
           // Trigger real-time route data calculation for accurate distance/duration
           mapHandler.calculateRealTimeRouteData();
+        });
         }
       }, 2000); // Wait 2 seconds before updating routes
     }
@@ -335,7 +340,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Pickup point deactivated, immediately updating routes...');
         // Clear timeout and update routes immediately
         clearTimeout(window.pickupRouteUpdateTimeout);
-        mapHandler.updateRoutesSmooth();
+        mapHandler.updateRoutesSmooth().then(() => {
+          // Update the sidebar route information after routes are updated
+          if (window.displayRouteInfo) {
+            window.displayRouteInfo();
+          }
+        });
         return; // Skip the debounced update below
       }
     }
@@ -345,14 +355,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('All pickup points are now inactive, clearing all routes immediately');
       // Clear timeout and update routes immediately
       clearTimeout(window.pickupRouteUpdateTimeout);
-      mapHandler.updateRoutesSmooth();
+      mapHandler.updateRoutesSmooth().then(() => {
+        // Update the sidebar route information after routes are updated
+        if (window.displayRouteInfo) {
+          window.displayRouteInfo();
+        }
+      });
       return; // Skip the debounced update below
     }
     
     // Debounce route updates for pickup point changes (only for non-deactivation events)
     clearTimeout(window.pickupRouteUpdateTimeout);
     window.pickupRouteUpdateTimeout = setTimeout(() => {
-      mapHandler.updateRoutesSmooth();
+      mapHandler.updateRoutesSmooth().then(() => {
+        // Update the sidebar route information after routes are updated
+        if (window.displayRouteInfo) {
+          window.displayRouteInfo();
+        }
+      });
     }, 1000); // Wait 1 second before updating routes
     
     // Update last pickup point update time
@@ -913,7 +933,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Update routes smoothly
       if (typeof mapHandler !== 'undefined') {
-      mapHandler.updateRoutesSmooth();
+      mapHandler.updateRoutesSmooth().then(() => {
+        // Update the sidebar route information after routes are updated
+        if (window.displayRouteInfo) {
+          window.displayRouteInfo();
+        }
+      });
       }
       
       showNotification('Routes and location refreshed', 'success');

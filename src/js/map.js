@@ -571,8 +571,8 @@ class MapHandler {
   
   // Smooth route updates without blinking
   async updateRoutesSmooth() {
-    if (!this.map || !this.vehicleMarker || this.pickupMarkers.length === 0) return;
-    if (this.isUpdatingRoutes) return; // Prevent concurrent updates
+    if (!this.map || !this.vehicleMarker || this.pickupMarkers.length === 0) return Promise.resolve();
+    if (this.isUpdatingRoutes) return Promise.resolve(); // Prevent concurrent updates
     
     this.isUpdatingRoutes = true;
     
@@ -596,7 +596,7 @@ class MapHandler {
         this.closestRouteInfo = null;
         this.secondRouteInfo = null;
         this.sortedPickupPoints = [];
-        return;
+        return Promise.resolve();
       }
       
       // Sort active pickup points by distance from vehicle
@@ -776,6 +776,11 @@ class MapHandler {
       this.routesDisplayed = false;
       
       console.log('All routes cleared successfully');
+      
+      // Trigger sidebar update after clearing all routes
+      if (window.displayRouteInfo) {
+        window.displayRouteInfo();
+      }
     } catch (error) {
       console.error('Error clearing routes:', error);
     }
@@ -1371,6 +1376,11 @@ class MapHandler {
       }
 
       console.log('Visual route paths updated successfully');
+
+      // Trigger sidebar update after visual route paths are updated
+      if (window.displayRouteInfo) {
+        window.displayRouteInfo();
+      }
 
     } catch (error) {
       console.error('Error updating visual route paths:', error);
