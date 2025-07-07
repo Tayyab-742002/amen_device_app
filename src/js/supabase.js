@@ -784,6 +784,51 @@ class SupabaseClient {
       return { success: false, error: error.message };
     }
   }
+
+  // Get real-time passenger statistics
+  async getPassengerStatistics(organizationId, vehicleId) {
+    if (!this.client) {
+      console.error('Supabase client not initialized');
+      return { success: false, error: 'Database not connected' };
+    }
+
+    try {
+      // Get total passengers (user images count)
+      const { data: userImages, error: imagesError } = await this.client
+        .rpc('get_user_images_by_org_and_vehicle', {
+          input_org_id: organizationId,
+          input_vehicle_id: vehicleId
+        });
+
+      if (imagesError) throw imagesError;
+
+      // Get verified passengers count
+      const { data: verifications, error: verificationError } = await this.client
+        .from('user_verification')
+        .select('username')
+        .eq('org_id', organizationId)
+        .eq('vehicle_id', vehicleId)
+        .eq('is_verified', true);
+
+      if (verificationError) throw verificationError;
+
+      const totalPassengers = userImages ? userImages.length : 0;
+      const verifiedPassengers = verifications ? verifications.length : 0;
+      const remainingPassengers = totalPassengers - verifiedPassengers;
+
+      return {
+        success: true,
+        data: {
+          total: totalPassengers,
+          verified: verifiedPassengers,
+          remaining: remainingPassengers
+        }
+      };
+    } catch (error) {
+      console.error('Error getting passenger statistics:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 // Export a singleton instance

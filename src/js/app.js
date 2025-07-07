@@ -34,6 +34,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   let routeInfo;
   let userImages = [];
   let userVerifications = {}; // Store verification status for users
+  let passengerCounters = {
+    total: 0,
+    verified: 0,
+    remaining: 0
+  };
 
   // Initialize the application
   async function initApp() {
@@ -104,11 +109,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Load user images
       loadUserImages();
       
-      // Load user verification status
-      loadUserVerifications();
-      
-      // Subscribe to real-time updates
-      setupRealTimeSubscriptions();
+              // Load user verification status
+        loadUserVerifications();
+        
+        // Setup passenger counter subscription
+        setupPassengerCounterSubscription();
+        
+        // Subscribe to real-time updates
+        setupRealTimeSubscriptions();
       
       // Setup event listeners
       setupEventListeners();
@@ -575,6 +583,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
       
       displayUserImages();
+      
+      // Update passenger counters after loading user images
+      updatePassengerCounters();
     } catch (error) {
       console.error('Error loading user images:', error);
       userImagesContainerEl.innerHTML = '<div class="error">Failed to load user images</div>';
@@ -610,6 +621,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Failed to load user verifications:', verificationResult.error);
         userVerifications = {};
       }
+      
+      // Update passenger counters after loading verifications
+      updatePassengerCounters();
     } catch (error) {
       console.error('Error loading user verifications:', error);
       userVerifications = {};
@@ -986,9 +1000,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showNotification('Verification saved but notification failed', 'warning');
               }
               
-              // Refresh the display
+              // Refresh the display and update counters
               await loadUserVerifications();
               await loadUserImages();
+              
+              // Update passenger counters immediately
+              updatePassengerCounters();
             } else {
               console.error('🔴 Failed to save verification:', verificationResult.error);
               showNotification('Verification successful but failed to save record', 'warning');
@@ -1394,6 +1411,121 @@ document.addEventListener('DOMContentLoaded', async () => {
     // The verification status will be updated through data reload
     // This function is kept for backward compatibility but the actual
     // verification display is now handled by displayUserImages()
+  }
+
+  // Calculate and update passenger counters
+  async function updatePassengerCounters() {
+    try {
+      // Get real-time data from database
+      const statsResult = await window.supabase.getPassengerStatistics(
+        config.organizationId,
+        config.vehicleId
+      );
+      
+      if (statsResult.success) {
+        passengerCounters.total = statsResult.data.total;
+        passengerCounters.verified = statsResult.data.verified;
+        passengerCounters.remaining = statsResult.data.remaining;
+        
+        console.log('🟣 Passenger counters updated:', passengerCounters);
+      } else {
+        // Fallback to local calculation if database query fails
+        console.warn('⚠️ Using fallback passenger counter calculation');
+        
+        if (!userImages || userImages.length === 0) {
+          passengerCounters.total = 0;
+          passengerCounters.verified = 0;
+          passengerCounters.remaining = 0;
+        } else {
+          passengerCounters.total = userImages.length;
+          passengerCounters.verified = 0;
+          
+          // Count verified passengers
+          userImages.forEach(imageData => {
+            const username = imageData.username || imageData.user_name || `User ${imageData.id}`;
+            if (isUserVerified(imageData.user_id, username)) {
+              passengerCounters.verified++;
+            }
+          });
+          
+          passengerCounters.remaining = passengerCounters.total - passengerCounters.verified;
+        }
+      }
+      
+      // Update the UI
+      displayPassengerCounters();
+    } catch (error) {
+      console.error('🔴 Error updating passenger counters:', error);
+      
+      // Fallback calculation
+      if (!userImages || userImages.length === 0) {
+        passengerCounters.total = 0;
+        passengerCounters.verified = 0;
+        passengerCounters.remaining = 0;
+      } else {
+        passengerCounters.total = userImages.length;
+        passengerCounters.verified = 0;
+        
+        userImages.forEach(imageData => {
+          const username = imageData.username || imageData.user_name || `User ${imageData.id}`;
+          if (isUserVerified(imageData.user_id, username)) {
+            passengerCounters.verified++;
+          }
+        });
+        
+        passengerCounters.remaining = passengerCounters.total - passengerCounters.verified;
+      }
+      
+      displayPassengerCounters();
+    }
+  }
+
+  // Display passenger counters with animation
+  function displayPassengerCounters() {
+    const totalEl = document.getElementById('total-passengers');
+    const verifiedEl = document.getElementById('verified-passengers');
+    const remainingEl = document.getElementById('remaining-passengers');
+    
+    if (!totalEl || !verifiedEl || !remainingEl) return;
+    
+    // Animate counter updates
+    animateCounter(totalEl, passengerCounters.total);
+    animateCounter(verifiedEl, passengerCounters.verified);
+    animateCounter(remainingEl, passengerCounters.remaining);
+  }
+
+  // Animate counter value changes
+  function animateCounter(element, newValue) {
+    const currentValue = parseInt(element.textContent) || 0;
+    
+    if (currentValue !== newValue) {
+      // Add updating class for visual feedback
+      element.classList.add('updating');
+      element.parentElement.classList.add('updating');
+      
+      // Update the value
+      element.textContent = newValue;
+      
+      // Remove updating class after animation
+      setTimeout(() => {
+        element.classList.remove('updating');
+        element.parentElement.classList.remove('updating');
+      }, 500);
+    }
+  }
+
+  // Real-time passenger counter subscription
+  function setupPassengerCounterSubscription() {
+    // Update counters whenever user images or verifications change
+    const updateCounters = async () => {
+      await updatePassengerCounters();
+    };
+    
+    // Set up interval for periodic updates (every 5 seconds)
+    setInterval(updateCounters, 5000);
+    
+    // Initial update
+    updateCounters();
   }
 
   // Initialize the application

@@ -77,6 +77,22 @@
           <button id="show-all-routes-details" class="btn btn-secondary">Refresh Routes</button>
           <button id="start-route" class="btn btn-primary">Start Route</button>
           <button id="emergency-alert" class="btn btn-danger">🚨 Emergency</button>
+          
+          <!-- Passenger Counters moved to bottom bar -->
+          <div class="bottom-counters">
+            <div class="mini-counter">
+              <span class="mini-counter-label">Total</span>
+              <span class="mini-counter-value" id="total-passengers">0</span>
+            </div>
+            <div class="mini-counter">
+              <span class="mini-counter-label">Verified</span>
+              <span class="mini-counter-value" id="verified-passengers">0</span>
+            </div>
+            <div class="mini-counter">
+              <span class="mini-counter-label">Remaining</span>
+              <span class="mini-counter-value" id="remaining-passengers">0</span>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -94,6 +110,8 @@
           <button id="verify-user" class="btn btn-accent">User Verification</button>
         </div>
       </div>
+      
+
     </aside>
   </div>
 
